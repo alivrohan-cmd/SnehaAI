@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,12 +14,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.5'
+          cache-disabled: true
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Publish APK to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: "Sneha AI v0.2.0 (Latest APK)"
+          files: app/build/outputs/apk/debug/app-debug.apk
       - uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: sneha-ai-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
