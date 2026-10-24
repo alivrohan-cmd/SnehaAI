@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings as AndroidSettings
-import android.speech.SpeechRecognizer
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,9 +59,9 @@ private data class SettingSection(
 )
 
 private val sections = listOf(
-    SettingSection("ai", "AI Brain (Google Gemini)", "API Key, মডেল বাছাই, অটো-ফলব্যাক ও Test Connection", Icons.Default.Psychology),
+    SettingSection("ai", "AI Brain & Custom Gateway", "থার্ড-পার্টি Gateway URL, sk- Token, Claude/GPT ও Gemini", Icons.Default.Psychology),
     SettingSection("privacy", "১০০% পারমিশন সেটআপ হাব", "কল, কন্টাক্টস, SMS, মাইক ও Accessibility পারমিশন", Icons.Default.Security),
-    SettingSection("voice", "ভয়েস ও ডোরেমন ওয়েক-মোড", "বাংলা/ইংরেজি কণ্ঠস্বর, অটো-লিসেনিং ও গতি", Icons.Default.RecordVoiceOver),
+    SettingSection("voice", "ভয়েস ও নিঃশব্দ ওয়েক-মোড", "বাংলা/ইংরেজি কণ্ঠস্বর, সাইলেন্ট লিসেনিং ও গতি", Icons.Default.RecordVoiceOver),
     SettingSection("auto", "স্ক্রিন অটোমেশন ও সিস্টেম কন্ট্রোল", "গেম ইনস্টল, WhatsApp সেন্ড, স্ক্রিন লক ও পাওয়ার মেনু", Icons.Default.AccessibilityNew),
     SettingSection("apps", "সব ইনস্টল করা অ্যাপ্লিকেশন", "প্রিয় অ্যাপ নির্বাচন ও দ্রুত চালু", Icons.Default.Apps),
     SettingSection("coding", "কোডিং রানটাইম", "WebView স্যান্ডবক্স ও Termux ইন্টিগ্রেশন", Icons.Default.Code),
@@ -181,14 +180,6 @@ fun SecCard(title: String, content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-fun Sec(t: String) = Text(
-    t,
-    style = MaterialTheme.typography.titleSmall,
-    color = MaterialTheme.colorScheme.primary,
-    modifier = Modifier.padding(top = 14.dp, bottom = 4.dp)
-)
-
-@Composable
 fun Note(t: String) = Text(
     t,
     style = MaterialTheme.typography.bodySmall,
@@ -249,74 +240,152 @@ private fun openIntent(ctx: Context, i: Intent, vm: MainViewModel) {
 @Composable
 fun AiPage(vm: MainViewModel) {
     val s by vm.settings.collectAsStateWithLifecycle()
-    val keySet by vm.keySet.collectAsStateWithLifecycle()
+    val gemKeySet by vm.geminiKeySet.collectAsStateWithLifecycle()
+    val gwKeySet by vm.gatewayKeySet.collectAsStateWithLifecycle()
     val conn by vm.conn.collectAsStateWithLifecycle()
     val testing by vm.testingConn.collectAsStateWithLifecycle()
     val models by vm.models.collectAsStateWithLifecycle()
-    var key by remember { mutableStateOf("") }
+
+    var baseUrlInput by remember(s.gatewayBaseUrl) { mutableStateOf(s.gatewayBaseUrl) }
+    var apiKeyInput by remember { mutableStateOf("") }
+    var customModelInput by remember(s.model) { mutableStateOf(s.model) }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("১. Gemini API Key ও সংযোগ") {
-            Note("আপনার API key ফোনের Android Keystore (AES-256-GCM) দিয়ে এনক্রিপ্ট করে রাখা হয়।")
+        SecCard("১. কানেকশন মোড (Connection Mode)") {
+            RadioRow(
+                label = "Custom Gateway (থার্ড-পার্টি URL + sk-... Token / Claude / GPT)",
+                selected = s.providerMode == "gateway"
+            ) { vm.set(K.providerMode, "gateway") }
+            RadioRow(
+                label = "Google Gemini Official API",
+                selected = s.providerMode == "gemini"
+            ) { vm.set(K.providerMode, "gemini") }
+        }
+
+        if (s.providerMode == "gateway") {
+            SecCard("২. Gateway Credentials (ভিডিওর মতো সেটআপ)") {
+                Note("যেকোনো থার্ড-পার্টি ওয়েবসাইটের Base URL (যেমন https://tabitoken.com) এবং আপনার মিলিয়ন/বিলিয়ন টোকেনের API Key (sk-...) দিন:")
+                OutlinedTextField(
+                    value = baseUrlInput,
+                    onValueChange = {
+                        baseUrlInput = it
+                        vm.set(K.gatewayBaseUrl, it.trim())
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Gateway Base URL (যেমন: https://tabitoken.com)") }
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(if (gwKeySet) "নতুন Gateway API Key (sk-...) দিলে আগেরটি বদলে যাবে" else "Gateway API Key (sk-...)") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Gateway Auth Scheme:", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilterChip(
+                        selected = s.gatewayAuthScheme == "bearer",
+                        onClick = { vm.set(K.gatewayAuthScheme, "bearer") },
+                        label = { Text("Authorization: Bearer") }
+                    )
+                    FilterChip(
+                        selected = s.gatewayAuthScheme == "x-api-key",
+                        onClick = { vm.set(K.gatewayAuthScheme, "x-api-key") },
+                        label = { Text("x-api-key (Claude)") }
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("Endpoint Format:", style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = s.gatewayFormat == "auto",
+                        onClick = { vm.set(K.gatewayFormat, "auto") },
+                        label = { Text("Auto (OpenAI + Claude)") }
+                    )
+                    FilterChip(
+                        selected = s.gatewayFormat == "openai",
+                        onClick = { vm.set(K.gatewayFormat, "openai") },
+                        label = { Text("/v1/chat/completions") }
+                    )
+                    FilterChip(
+                        selected = s.gatewayFormat == "anthropic",
+                        onClick = { vm.set(K.gatewayFormat, "anthropic") },
+                        label = { Text("/v1/messages") }
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            vm.set(K.gatewayBaseUrl, baseUrlInput.trim())
+                            if (apiKeyInput.isNotBlank()) {
+                                vm.saveGatewayKey(apiKeyInput)
+                                apiKeyInput = ""
+                            }
+                        }
+                    ) { Text("Save Gateway") }
+                    Button(
+                        onClick = { vm.testConnection() },
+                        enabled = !testing
+                    ) { Text(if (testing) "পরীক্ষা চলছে…" else "Test Connection") }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(conn, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
+        } else {
+            SecCard("২. Google Gemini API Key") {
+                OutlinedTextField(
+                    value = apiKeyInput,
+                    onValueChange = { apiKeyInput = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(if (gemKeySet) "নতুন Gemini API key দিলে আগেরটি বদলে যাবে" else "Gemini API key দিন") },
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.saveKey(apiKeyInput); apiKeyInput = "" },
+                        enabled = apiKeyInput.isNotBlank()
+                    ) { Text("Key সেভ করুন") }
+                    Button(
+                        onClick = { vm.testConnection() },
+                        enabled = gemKeySet && !testing
+                    ) { Text(if (testing) "পরীক্ষা চলছে…" else "Test Connection") }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(conn, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+
+        SecCard("৩. প্রিমিয়াম মডেল নির্বাচন বা যেকোনো মডেলের নাম লিখুন") {
+            Text("বর্তমান সক্রিয় মডেল: ${s.model}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
             OutlinedTextField(
-                value = key,
-                onValueChange = { key = it },
+                value = customModelInput,
+                onValueChange = {
+                    customModelInput = it
+                    if (it.isNotBlank()) vm.set(K.model, it.trim())
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text(if (keySet) "নতুন API key দিলে আগেরটি বদলে যাবে" else "Google AI Studio থেকে পাওয়া API key দিন") },
-                visualTransformation = PasswordVisualTransformation()
+                label = { Text("যেকোনো মডেল আইডি লিখুন (যেমন: claude-opus-4-6, gpt-4o)") }
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { vm.saveKey(key); key = "" },
-                    enabled = key.isNotBlank()
-                ) { Text("Key সেভ করুন") }
-                Button(
-                    onClick = { vm.testConnection() },
-                    enabled = keySet && !testing
-                ) { Text(if (testing) "পরীক্ষা চলছে…" else "Test Connection") }
-                if (keySet) {
-                    TextButton(onClick = { vm.deleteKey() }) { Text("মুছুন") }
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = conn,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.secondary
-            )
-        }
-
-        SecCard("২. প্রাথমিক মডেল নির্বাচন") {
-            Text("বর্তমান প্রাথমিক মডেল: ${s.model}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            if (models.isEmpty()) {
-                Note("উপরে 'Test Connection' চাপলে আপনার API key-এর জন্য অনুমোদিত সব Gemini মডেলের তালিকা দেখাবে।")
-            } else {
-                Spacer(Modifier.height(4.dp))
+            if (models.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("তালিকা থেকে বেছে নিন:", style = MaterialTheme.typography.bodySmall)
                 models.forEach { m ->
-                    RadioRow(m, m == s.model) { vm.set(K.model, m) }
+                    RadioRow(m, m == s.model) {
+                        customModelInput = m
+                        vm.set(K.model, m)
+                    }
                 }
-            }
-        }
-
-        SecCard("৩. High Demand (503) রি-ট্রাই ও বিকল্প মডেল") {
-            PrefSlider(
-                label = "স্বয়ংক্রিয় পুনরায় চেষ্টা (Retries)",
-                value = s.maxRetries.toFloat(),
-                range = 0f..5f,
-                fmt = { "${it.toInt()} বার" }
-            ) { vm.set(K.maxRetries, it.toInt()) }
-
-            SwitchRow("প্রাথমিক মডেলে অতিরিক্ত চাপ (503/429) থাকলে বিকল্প মডেলে চেষ্টা করো", s.autoFallback) {
-                vm.set(K.autoFallback, it)
-            }
-            if (s.autoFallback && models.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text("পছন্দের বিকল্প (Fallback) মডেল: ${s.fallbackModel}", style = MaterialTheme.typography.bodySmall)
-                models.filter { it != s.model }.take(8).forEach { m ->
-                    RadioRow(m, m == s.fallbackModel) { vm.set(K.fallbackModel, m) }
-                }
+            } else {
+                Note("'Test Connection' চাপলে আপনার টোকেনে থাকা সব প্রিমিয়াম মডেলের তালিকা স্বয়ংক্রিয়ভাবে নিচে চলে আসবে।")
             }
         }
     }
@@ -332,9 +401,10 @@ fun VoicePage(vm: MainViewModel) {
     val voices = remember(s.lang, tick) { a.tts.voices(s.lang) }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("কণ্ঠস্বর ও অটো-লিসেনিং (Siri মোড)") {
-            SwitchRow("Doreman-এর উত্তর জোরে পড়ে শোনাও (Auto-Speak)", s.autoSpeak) { vm.set(K.autoSpeak, it) }
-            SwitchRow("সর্বদা শোনা ও ওয়েক মোড (চাপ না দিয়েই কথা শুনবে)", handsFree) { vm.toggleHandsFree(it) }
+        SecCard("নিঃশব্দ ওয়েক-মোড (No Beep Sound)") {
+            SwitchRow("Doreman-এর উত্তর জোরে পড়ে শোনাও", s.autoSpeak) { vm.set(K.autoSpeak, it) }
+            SwitchRow("নিঃশব্দে শুধু 'Doreman' ডাকের অপেক্ষায় থাকবে", handsFree) { vm.toggleHandsFree(it) }
+            Note("মাইক্রোফোন চালু বা বন্ধ হওয়ার সময় কোনো 'টং/বিপ' সাউন্ড করবে না এবং অ্যাপ থেকে বের হয়ে গেলে সম্পূর্ণ নীরব থাকবে।")
             PrefSlider("কথার গতি", s.speechRate, 0.5f..2f, { "%.1fx".format(it) }) { vm.set(K.rate, it) }
             PrefSlider("ভলিউম", s.volume, 0f..1f, { "${(it * 100).toInt()}%" }) { vm.set(K.volume, it) }
         }
@@ -348,10 +418,6 @@ fun VoicePage(vm: MainViewModel) {
                     vm.speak(if (s.lang == "bn") "হ্যালো, আমি ডোরেমন। বলুন আপনার জন্য কী করতে পারি?" else "Hello, I am Doreman. How can I help you?")
                 }) { Text("ভয়েস টেস্ট") }
                 OutlinedButton(onClick = { tick++ }) { Text("তালিকা রিফ্রেশ") }
-            }
-            Spacer(Modifier.height(4.dp))
-            OutlinedButton(onClick = { openIntent(ctx, Intent("com.android.settings.TTS_SETTINGS"), vm) }) {
-                Text("ফোনের TTS ইঞ্জিন সেটিংস খুলুন")
             }
         }
     }
@@ -372,14 +438,6 @@ fun AutoPage(vm: MainViewModel) {
             Button(onClick = { openIntent(ctx, Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS), vm) }) {
                 Text("Android Accessibility সেটিংস খুলুন")
             }
-        }
-
-        SecCard("চালু করার নিয়ম (Infinix / Android 13+)") {
-            Note(
-                "১. উপরের বাটনে চাপুন → 'Installed apps' বা 'Downloaded apps' → Doreman বেছে নিন।\n" +
-                    "২. সুইচ ধূসর (Restricted) থাকলে ফোনের Settings > Apps > Doreman > উপরের ডানে (⋮) মেনু > 'Allow restricted settings' চালু করুন।\n" +
-                    "৩. এরপর আবার Accessibility সেটিংসে গিয়ে Doreman চালু করুন। এটি চালু থাকলেই Doreman নিজে থেকে Play Store থেকে গেম ইনস্টল ও WhatsApp-এ মেসেজ সেন্ড করতে পারবে।"
-            )
         }
     }
 }
@@ -552,8 +610,8 @@ fun NotifPage(vm: MainViewModel) {
 @Composable
 fun AboutPage() {
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("Doreman AI — v1.0.0") {
-            Text("আপনার ভয়েস-কন্ট্রোলড Siri-স্টাইল পার্সোনাল অ্যাসিস্ট্যান্ট")
+        SecCard("Doreman AI — v1.1.0") {
+            Text("কাস্টম গেটওয়ে (Claude/OpenAI/Gemini) ও সাইলেন্ট ওয়েক ভয়েস অ্যাসিস্ট্যান্ট")
         }
     }
 }

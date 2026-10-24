@@ -45,7 +45,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val level = MutableStateFlow(0f)
     val banner = MutableStateFlow<String?>(null)
     val pending = MutableStateFlow<Plan?>(null)
-    val keySet = MutableStateFlow(a.keys.has(GEMINI_KEY_NAME))
+    val keySet = MutableStateFlow(a.keys.has(GEMINI_KEY_NAME) || a.keys.has(GATEWAY_KEY_NAME))
+    val gatewayKeySet = MutableStateFlow(a.keys.has(GATEWAY_KEY_NAME))
+    val geminiKeySet = MutableStateFlow(a.keys.has(GEMINI_KEY_NAME))
     val models = MutableStateFlow<List<String>>(emptyList())
     val conn = MutableStateFlow("এখনও পরীক্ষা করা হয়নি")
     val connOk = MutableStateFlow<Boolean?>(null)
@@ -56,25 +58,68 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val stt = SpeechInput(a)
     private var thinkJob: Job? = null
+    private var inForeground = true
+    private var awakeForNextCommand = false
 
     private val wakeWords = listOf(
-        "doreman", "doraemon", "doremon", "ডোরেমন", "ডরেমন", "দোরেমন", "hey doreman", "হে ডোরেমন"
+        "doreman", "doraemon", "doremon", "ডোরেমন", "ডরেমন", "দোরেমন", "hey doreman", "হে ডোরেমন", "hello doreman"
     )
+
+    private fun currentProvider(): AiProvider = a.activeProvider(settings.value.providerMode)
+
+    fun onAppBackgrounded() {
+        inForeground = false
+        stt.release()
+        if (!a.executor.busy) {
+            a.tts.stop()
+            phase.value = Phase.Idle
+            partial.value = ""
+            level.value = 0f
+        }
+    }
+
+    fun onAppForegrounded() {
+        inForeground = true
+        if (handsFree.value && keySet.value && !a.executor.busy && phase.value == Phase.Idle) {
+            scheduleNextListen(500)
+        }
+    }
+
+    private fun onVoiceResult(spoken: String) {
+        val raw = spoken.trim()
+        if (raw.isEmpty()) {
+            if (handsFree.value && inForeground) scheduleNextListen(600)
+            return
+        }
+
+        val lower = raw.lowercase()
+        val hasWakeWord = wakeWords.any { lower.contains(it) }
+
+        if (!hasWakeWord && !awakeForNextCommand) {
+            if (handsFree.value && inForeground) scheduleNextListen(500)
+            return
+        }
+
+        val cleanedCmd = stripWakeWord(raw)
+        if (cleanedCmd.isBlank()) {
+            awakeForNextCommand = true
+            val greet = "হ্যাঁ বলুন, আমি শুনছি!"
+            lastSpokenReply.value = greet
+            speak(greet) {
+                if (handsFree.value && inForeground) scheduleNextListen(350)
+            }
+            return
+        }
+
+        awakeForNextCommand = false
+        send(cleanedCmd, isRetry = false)
+    }
 
     fun send(text: String, isRetry: Boolean = false) {
         val raw = text.trim()
         if (raw.isEmpty()) return
 
-        val cleanedCmd = stripWakeWord(raw)
-        if (cleanedCmd.isBlank()) {
-            val greet = "হ্যাঁ বলুন, আমি শুনছি!"
-            lastSpokenReply.value = greet
-            speak(greet) {
-                if (handsFree.value) scheduleNextListen(400)
-            }
-            return
-        }
-
+        val cleanedCmd = stripWakeWord(raw).ifBlank { raw }
         a.tts.stop()
         thinkJob?.cancel()
         thinkJob = viewModelScope.launch {
@@ -105,7 +150,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 maxRetries = s.maxRetries
             )
 
-            val res = a.provider.generate(sys, hist, cfg, true) { statusMsg ->
+            val res = currentProvider().generate(sys, hist, cfg, true) { statusMsg ->
                 retryStatus.value = statusMsg
             }
             phase.value = Phase.Idle
@@ -124,7 +169,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 val friendly = aiErr?.userMessage() ?: "সংযোগ বা সার্ভার ত্রুটি: আবার চেষ্টা করুন।"
                 lastSpokenReply.value = friendly
                 banner.value = friendly
-                if (handsFree.value) scheduleNextListen(2000)
+                if (handsFree.value && inForeground) scheduleNextListen(2000)
             }
         }
     }
@@ -133,8 +178,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         var s = input.trim()
         for (w in wakeWords) {
             if (s.equals(w, true)) return ""
-            if (s.lowercase().startsWith("$w ")) {
-                s = s.substring(w.length).trim()
+            val idx = s.lowercase().indexOf(w)
+            if (idx == 0) {
+                s = s.substring(w.length).trim().removePrefix(",").trim()
             }
         }
         return s
@@ -151,9 +197,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         lastSpokenReply.value = reply
 
         val hasActions = p.actions.isNotEmpty()
-        if (settings.value.autoSpeak || handsFree.value) {
+        if (settings.value.autoSpeak && inForeground) {
             speak(reply) {
-                if (handsFree.value && !hasActions && !a.executor.busy) {
+                if (handsFree.value && inForeground && !hasActions && !a.executor.busy) {
                     scheduleNextListen(450)
                 }
             }
@@ -170,7 +216,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (summary.isNotBlank()) {
                 lastSpokenReply.value = summary
             }
-            if (handsFree.value) {
+            if (handsFree.value && inForeground) {
                 scheduleNextListen(1200)
             }
         }
@@ -179,8 +225,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun scheduleNextListen(delayMs: Long) {
         viewModelScope.launch(Dispatchers.Main) {
             delay(delayMs)
-            if (handsFree.value && !a.executor.busy && phase.value == Phase.Idle && !a.tts.speaking.value) {
-                startListening()
+            if (inForeground && handsFree.value && !a.executor.busy && phase.value == Phase.Idle && !a.tts.speaking.value) {
+                startListening(manualTap = false)
             }
         }
     }
@@ -218,15 +264,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun toggleHandsFree(enable: Boolean) {
         handsFree.value = enable
         if (enable) {
-            startListening()
+            startListening(manualTap = false)
         } else {
             stopListening()
         }
     }
 
-    fun startListening() {
+    fun startListening(manualTap: Boolean = true) {
+        if (!inForeground) return
         a.tts.stop()
         if (a.executor.busy) return
+        if (manualTap) awakeForNextCommand = true
         phase.value = Phase.Listening
         partial.value = ""
         stt.start(
@@ -236,16 +284,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 phase.value = Phase.Idle
                 partial.value = ""
                 level.value = 0f
-                send(it)
+                onVoiceResult(it)
             },
             onError = {
                 phase.value = Phase.Idle
                 partial.value = ""
                 level.value = 0f
-                if (handsFree.value) {
-                    scheduleNextListen(900)
-                } else {
-                    banner.value = it
+                if (handsFree.value && inForeground) {
+                    scheduleNextListen(800)
                 }
             },
             onLevel = { level.value = it },
@@ -257,6 +303,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopAll() {
         handsFree.value = false
+        awakeForNextCommand = false
         a.executor.cancel()
         a.tts.stop()
         thinkJob?.cancel()
@@ -269,13 +316,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun saveKey(k: String) {
         a.keys.save(GEMINI_KEY_NAME, k.trim())
+        geminiKeySet.value = true
         keySet.value = true
         connOk.value = null
-        conn.value = "কী সংরক্ষিত হয়েছে — এবার 'Test Connection' চাপুন"
+        conn.value = "Gemini কী সংরক্ষিত হয়েছে — এবার 'Test Connection' চাপুন"
+    }
+
+    fun saveGatewayKey(k: String) {
+        a.keys.save(GATEWAY_KEY_NAME, k.trim())
+        gatewayKeySet.value = true
+        keySet.value = true
+        connOk.value = null
+        conn.value = "Gateway API Key (sk-...) সংরক্ষিত হয়েছে — এবার 'Test Connection' চাপুন"
     }
 
     fun deleteKey() {
         a.keys.delete(GEMINI_KEY_NAME)
+        a.keys.delete(GATEWAY_KEY_NAME)
+        geminiKeySet.value = false
+        gatewayKeySet.value = false
         keySet.value = false
         connOk.value = false
         models.value = emptyList()
@@ -285,27 +344,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun testConnection() {
         viewModelScope.launch {
             testingConn.value = true
-            conn.value = "Google Gemini সার্ভারের সাথে সংযোগ পরীক্ষা চলছে…"
-            a.provider.listModels().onSuccess { list ->
+            val mode = settings.value.providerMode
+            conn.value = if (mode == "gateway") "কাস্টম গেটওয়ে (${settings.value.gatewayBaseUrl})-এর সাথে সংযোগ পরীক্ষা চলছে…"
+            else "Google Gemini সার্ভারের সাথে সংযোগ পরীক্ষা চলছে…"
+
+            currentProvider().listModels().onSuccess { list ->
                 models.value = list
                 connOk.value = list.isNotEmpty()
                 if (list.isEmpty()) {
-                    conn.value = "সংযোগ হয়েছে কিন্তু কোনো generateContent মডেল পাওয়া যায়নি।"
+                    conn.value = "সংযোগ হয়েছে কিন্তু কোনো মডেল পাওয়া যায়নি।"
                 } else {
                     val cur = settings.value.model
-                    val curFallback = settings.value.fallbackModel
-                    var msg = "✓ সংযোগ সফল — আপনার API key-তে ${list.size}টি মডেল সক্রিয় আছে"
+                    var msg = "✓ সংযোগ সফল — ${list.size}টি মডেল পাওয়া গেছে"
                     if (cur !in list) {
-                        val pick = pickDefault(list)
+                        val pick = list.firstOrNull { it.contains("claude", true) || it.contains("flash", true) || it.contains("gpt", true) }
+                            ?: list.firstOrNull()
                         if (pick != null) {
                             a.prefs.set(K.model, pick)
-                            msg += "। প্রাথমিক মডেল হিসেবে '$pick' বেছে নেওয়া হয়েছে"
-                        }
-                    }
-                    if (curFallback !in list) {
-                        val fbPick = pickFallbackDefault(list, settings.value.model)
-                        if (fbPick != null) {
-                            a.prefs.set(K.fallbackModel, fbPick)
+                            msg += "। মডেল হিসেবে '$pick' সেট করা হয়েছে"
                         }
                     }
                     conn.value = msg
@@ -317,26 +373,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             testingConn.value = false
         }
-    }
-
-    private fun pickDefault(list: List<String>): String? {
-        fun ver(n: String) = Regex("(\\d+)(?:\\.(\\d+))?").find(n)?.let {
-            (it.groupValues[1].toInt() * 100) + (it.groupValues[2].toIntOrNull() ?: 0)
-        } ?: 0
-        return list.filter { n ->
-            n.contains("flash") &&
-                listOf("lite", "image", "tts", "live", "audio", "thinking", "exp").none { n.contains(it) }
-        }.maxByOrNull { ver(it) } ?: list.firstOrNull()
-    }
-
-    private fun pickFallbackDefault(list: List<String>, primary: String): String? {
-        val candidates = list.filter { n ->
-            n != primary &&
-                listOf("image", "tts", "live", "audio", "transcribe").none { n.contains(it) }
-        }
-        return candidates.firstOrNull { it.contains("flash-lite") }
-            ?: candidates.firstOrNull { it.contains("flash") }
-            ?: candidates.firstOrNull()
     }
 
     fun <T> set(key: Preferences.Key<T>, v: T) {

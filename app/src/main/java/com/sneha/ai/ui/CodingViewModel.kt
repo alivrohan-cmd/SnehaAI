@@ -42,7 +42,7 @@ class CodingViewModel(app: Application) : AndroidViewModel(app) {
         if (task != "write" && code.value.isBlank()) { note.value = "আগে এডিটরে কোড দিন বা তৈরি করুন"; return }
         viewModelScope.launch {
             busy.value = true
-            note.value = "Gemini কোড তৈরি করছে…"
+            note.value = "কোড তৈরি হচ্ছে…"
             val s = a.prefs.current()
             val l = lang.value
             val user = when (task) {
@@ -61,7 +61,7 @@ class CodingViewModel(app: Application) : AndroidViewModel(app) {
                 autoFallback = s.autoFallback,
                 maxRetries = s.maxRetries
             )
-            a.provider.generate(sys, listOf(ChatMsg("user", user)), cfg, false) { statusMsg ->
+            a.activeProvider(s.providerMode).generate(sys, listOf(ChatMsg("user", user)), cfg, false) { statusMsg ->
                 note.value = statusMsg
             }.onSuccess { r ->
                 a.prefs.addUsage(r.promptTokens, r.outputTokens)

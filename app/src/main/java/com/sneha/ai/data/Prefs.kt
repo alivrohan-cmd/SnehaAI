@@ -10,6 +10,10 @@ import kotlinx.coroutines.flow.map
 private val Context.ds by preferencesDataStore("sneha_prefs")
 
 data class Settings(
+    val providerMode: String = "gemini",
+    val gatewayBaseUrl: String = "https://tabitoken.com",
+    val gatewayAuthScheme: String = "bearer",
+    val gatewayFormat: String = "auto",
     val model: String = "gemini-3.6-flash",
     val fallbackModel: String = "gemini-3.5-flash-lite",
     val autoFallback: Boolean = true,
@@ -35,6 +39,10 @@ data class Settings(
 )
 
 object K {
+    val providerMode = stringPreferencesKey("provider_mode")
+    val gatewayBaseUrl = stringPreferencesKey("gateway_base_url")
+    val gatewayAuthScheme = stringPreferencesKey("gateway_auth_scheme")
+    val gatewayFormat = stringPreferencesKey("gateway_format")
     val model = stringPreferencesKey("model")
     val fallbackModel = stringPreferencesKey("fallback_model")
     val autoFallback = booleanPreferencesKey("auto_fallback")
@@ -63,6 +71,10 @@ class Prefs(private val ctx: Context) {
     val flow: Flow<Settings> = ctx.ds.data.map { p ->
         val d = Settings()
         Settings(
+            providerMode = p[K.providerMode] ?: d.providerMode,
+            gatewayBaseUrl = p[K.gatewayBaseUrl] ?: d.gatewayBaseUrl,
+            gatewayAuthScheme = p[K.gatewayAuthScheme] ?: d.gatewayAuthScheme,
+            gatewayFormat = p[K.gatewayFormat] ?: d.gatewayFormat,
             model = p[K.model] ?: d.model,
             fallbackModel = p[K.fallbackModel] ?: d.fallbackModel,
             autoFallback = p[K.autoFallback] ?: d.autoFallback,

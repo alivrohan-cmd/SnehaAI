@@ -2,6 +2,7 @@ package com.sneha.ai
 
 import android.app.Application
 import com.sneha.ai.ai.AiProvider
+import com.sneha.ai.ai.GatewayProvider
 import com.sneha.ai.ai.GeminiProvider
 import com.sneha.ai.apps.AppLauncher
 import com.sneha.ai.automation.ActionExecutor
@@ -30,6 +31,9 @@ class SnehaApp : Application() {
     val tts by lazy { SpeechOutput(this) }
     val executor by lazy { ActionExecutor(this) }
 
-    private val gemini by lazy { GeminiProvider(keys) }
+    val gemini by lazy { GeminiProvider(keys) }
+    val gateway by lazy { GatewayProvider(keys, prefs) }
+
+    fun activeProvider(mode: String): AiProvider = if (mode == "gateway") gateway else gemini
     val provider: AiProvider get() = gemini
 }
