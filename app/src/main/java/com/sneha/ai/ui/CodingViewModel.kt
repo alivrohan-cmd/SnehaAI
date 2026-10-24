@@ -42,7 +42,7 @@ class CodingViewModel(app: Application) : AndroidViewModel(app) {
         if (task != "write" && code.value.isBlank()) { note.value = "আগে এডিটরে কোড দিন বা তৈরি করুন"; return }
         viewModelScope.launch {
             busy.value = true
-            note.value = ""
+            note.value = "Gemini কোড তৈরি করছে…"
             val s = a.prefs.current()
             val l = lang.value
             val user = when (task) {
@@ -53,12 +53,25 @@ class CodingViewModel(app: Application) : AndroidViewModel(app) {
             val sys = "You are a careful coding assistant. Explanations in ${if (s.lang == "bn") "Bengali" else "English"}; code, identifiers and comments in English. " +
                 "When you return code, return ONE complete file in a single fenced code block, then a short explanation. " +
                 "Never claim the code was executed or tested. Mention the runtime/compiler needed if relevant."
-            val cfg = GenConfig(s.model, if (s.useTemperature) 0.2f else null, maxOf(s.maxTokens, 4096))
-            a.provider.generate(sys, listOf(ChatMsg("user", user)), cfg, false).onSuccess { r ->
+            val cfg = GenConfig(
+                model = s.model,
+                temperature = if (s.useTemperature) 0.2f else null,
+                maxTokens = maxOf(s.maxTokens, 4096),
+                fallbackModel = s.fallbackModel,
+                autoFallback = s.autoFallback,
+                maxRetries = s.maxRetries
+            )
+            a.provider.generate(sys, listOf(ChatMsg("user", user)), cfg, false) { statusMsg ->
+                note.value = statusMsg
+            }.onSuccess { r ->
                 a.prefs.addUsage(r.promptTokens, r.outputTokens)
                 val m = Regex("```[A-Za-z0-9+#_-]*[ \\t]*\\n([\\s\\S]*?)```").find(r.text)
-                if (m != null) { code.value = m.groupValues[1].trimEnd() + "\n"; note.value = r.text.replace(m.value, "").trim() }
-                else note.value = r.text
+                if (m != null) {
+                    code.value = m.groupValues[1].trimEnd() + "\n"
+                    note.value = r.text.replace(m.value, "").trim()
+                } else {
+                    note.value = r.text
+                }
             }.onFailure { e ->
                 if (e is CancellationException) throw e
                 note.value = (e as? AiException)?.userMessage() ?: "ত্রুটি: ${e.message}"

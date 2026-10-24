@@ -11,6 +11,9 @@ private val Context.ds by preferencesDataStore("sneha_prefs")
 
 data class Settings(
     val model: String = "gemini-3.6-flash",
+    val fallbackModel: String = "gemini-3.5-flash-lite",
+    val autoFallback: Boolean = true,
+    val maxRetries: Int = 3,
     val useTemperature: Boolean = false,
     val temperature: Float = 0.7f,
     val maxTokens: Int = 2048,
@@ -33,6 +36,9 @@ data class Settings(
 
 object K {
     val model = stringPreferencesKey("model")
+    val fallbackModel = stringPreferencesKey("fallback_model")
+    val autoFallback = booleanPreferencesKey("auto_fallback")
+    val maxRetries = intPreferencesKey("max_retries")
     val useTemp = booleanPreferencesKey("use_temperature")
     val temperature = floatPreferencesKey("temperature")
     val maxTokens = intPreferencesKey("max_tokens")
@@ -58,6 +64,9 @@ class Prefs(private val ctx: Context) {
         val d = Settings()
         Settings(
             model = p[K.model] ?: d.model,
+            fallbackModel = p[K.fallbackModel] ?: d.fallbackModel,
+            autoFallback = p[K.autoFallback] ?: d.autoFallback,
+            maxRetries = (p[K.maxRetries] ?: d.maxRetries).coerceIn(0, 5),
             useTemperature = p[K.useTemp] ?: d.useTemperature,
             temperature = p[K.temperature] ?: d.temperature,
             maxTokens = p[K.maxTokens] ?: d.maxTokens,

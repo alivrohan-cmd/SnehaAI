@@ -1,53 +1,42 @@
-name: Build SnehaAI APK
+name: Build APK
 
 on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Auto-extract SnehaAI.zip to repo root
-        run: |
-          if [ -f "SnehaAI.zip" ]; then
-            unzip -q -o SnehaAI.zip
-            cp -r SnehaAI/* .
-            rm -rf SnehaAI SnehaAI.zip
-            sed -i '/aapt2FromMavenOverride/d' gradle.properties || true
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "Extract SnehaAI project structure" || true
-            git push || true
-          fi
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses & Install Platform 34
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
       - name: Set up Gradle 8.5
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
 
       - name: Build Debug APK
-        run: |
-          sed -i '/aapt2FromMavenOverride/d' gradle.properties || true
-          gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --no-daemon --stacktrace
 
-      - name: Upload APK
+      - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SnehaAI-debug-apk
+          name: sneha-ai-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

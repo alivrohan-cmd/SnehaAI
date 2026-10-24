@@ -8,7 +8,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** চ্যাট ইতিহাস (সর্বশেষ ২০০টি বার্তা) — শুধু লোকালি। Room-এর বদলে সহজ JSON ফাইল, যাতে Termux বিল্ড হালকা থাকে। */
 class ChatStore(ctx: Context) {
     private val file = File(ctx.filesDir, "chat.json")
     private val _items = MutableStateFlow(load())
@@ -19,18 +18,48 @@ class ChatStore(ctx: Context) {
             val a = JSONArray(file.readText())
             (0 until a.length()).map {
                 val o = a.getJSONObject(it)
-                ChatMsg(o.getString("role"), o.getString("text"), o.optLong("ts"))
+                ChatMsg(
+                    role = o.getString("role"),
+                    text = o.getString("text"),
+                    ts = o.optLong("ts"),
+                    modelUsed = o.optString("modelUsed").takeIf { s -> s.isNotBlank() },
+                    isError = o.optBoolean("isError", false),
+                    retryPrompt = o.optString("retryPrompt").takeIf { s -> s.isNotBlank() }
+                )
             }
         }
-    } catch (e: Exception) { emptyList() }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    @Synchronized
+    private fun saveAll(l: List<ChatMsg>) {
+        val trimmed = l.takeLast(200)
+        val a = JSONArray()
+        trimmed.forEach {
+            val obj = JSONObject()
+                .put("role", it.role)
+                .put("text", it.text)
+                .put("ts", it.ts)
+                .put("isError", it.isError)
+            it.modelUsed?.let { m -> obj.put("modelUsed", m) }
+            it.retryPrompt?.let { rp -> obj.put("retryPrompt", rp) }
+            a.put(obj)
+        }
+        try {
+            file.writeText(a.toString())
+        } catch (_: Exception) {}
+        _items.value = trimmed
+    }
 
     @Synchronized
     fun add(m: ChatMsg) {
-        val l = (_items.value + m).takeLast(200)
-        val a = JSONArray()
-        l.forEach { a.put(JSONObject().put("role", it.role).put("text", it.text).put("ts", it.ts)) }
-        try { file.writeText(a.toString()) } catch (_: Exception) {}
-        _items.value = l
+        saveAll(_items.value + m)
+    }
+
+    @Synchronized
+    fun removeErrorsForRetry(prompt: String) {
+        saveAll(_items.value.filterNot { it.isError && it.retryPrompt == prompt })
     }
 
     fun clear() {
