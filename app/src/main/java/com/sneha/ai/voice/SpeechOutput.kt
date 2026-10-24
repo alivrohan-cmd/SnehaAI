@@ -12,6 +12,7 @@ class SpeechOutput(ctx: Context) {
     private var ready = false
     val speaking = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
+    private var onUtteranceDone: (() -> Unit)? = null
 
     init {
         tts = TextToSpeech(ctx.applicationContext) { st ->
@@ -19,42 +20,80 @@ class SpeechOutput(ctx: Context) {
             if (ready) {
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(id: String?) { speaking.value = true }
-                    override fun onDone(id: String?) { speaking.value = false }
+                    override fun onDone(id: String?) {
+                        speaking.value = false
+                        val cb = onUtteranceDone
+                        onUtteranceDone = null
+                        cb?.invoke()
+                    }
                     @Deprecated("Deprecated in Java")
-                    override fun onError(id: String?) { speaking.value = false }
-                    override fun onStop(id: String?, interrupted: Boolean) { speaking.value = false }
+                    override fun onError(id: String?) {
+                        speaking.value = false
+                        onUtteranceDone = null
+                    }
+                    override fun onStop(id: String?, interrupted: Boolean) {
+                        speaking.value = false
+                        onUtteranceDone = null
+                    }
                 })
             } else error.value = "TextToSpeech শুরু করা যায়নি"
         }
     }
 
-    fun speak(text: String, lang: String, rate: Float, volume: Float, voiceName: String): Boolean {
+    fun speak(
+        text: String,
+        lang: String,
+        rate: Float,
+        volume: Float,
+        voiceName: String,
+        onDone: (() -> Unit)? = null
+    ): Boolean {
         val t = tts
-        if (t == null || !ready) { error.value = "TTS এখনও প্রস্তুত নয়"; return false }
-        val loc = Locale.forLanguageTag(if (lang == "bn") "bn-IN" else "en-IN")
-        val r = t.setLanguage(loc)
-        if (r == TextToSpeech.LANG_MISSING_DATA || r == TextToSpeech.LANG_NOT_SUPPORTED) {
+        if (t == null || !ready) {
+            error.value = "TTS এখনও প্রস্তুত নয়"
+            return false
+        }
+        val candidates = if (lang == "bn") {
+            listOf(Locale.forLanguageTag("bn-BD"), Locale.forLanguageTag("bn-IN"), Locale("bn"))
+        } else {
+            listOf(Locale.US, Locale.UK, Locale.forLanguageTag("en-IN"))
+        }
+        var langSupported = false
+        for (loc in candidates) {
+            val r = t.setLanguage(loc)
+            if (r != TextToSpeech.LANG_MISSING_DATA && r != TextToSpeech.LANG_NOT_SUPPORTED) {
+                langSupported = true
+                break
+            }
+        }
+        if (!langSupported) {
             error.value = "এই ভাষার TTS ভয়েস ইনস্টল নেই। Settings > ভয়েস > TTS ইঞ্জিন সেটিংস থেকে ডাউনলোড করুন।"
             return false
         }
         if (voiceName.isNotBlank()) {
-            try { t.voices?.firstOrNull { it.name == voiceName }?.let { t.voice = it } } catch (_: Exception) {}
+            try {
+                t.voices?.firstOrNull { it.name == voiceName }?.let { t.voice = it }
+            } catch (_: Exception) {}
         }
         t.setSpeechRate(rate)
         val b = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume.coerceIn(0f, 1f)) }
         error.value = null
+        onUtteranceDone = onDone
         t.speak(text.take(3500), TextToSpeech.QUEUE_FLUSH, b, "sneha")
         return true
     }
 
     fun stop() {
+        onUtteranceDone = null
         tts?.stop()
         speaking.value = false
     }
 
     fun voices(lang: String): List<String> = try {
-        tts?.voices?.filter { it.locale.language == lang }?.map { it.name }?.sorted() ?: emptyList()
-    } catch (e: Exception) { emptyList() }
+        tts?.voices?.filter { it.locale.language.startsWith(lang, true) }?.map { it.name }?.sorted() ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     fun shutdown() { tts?.shutdown() }
 }

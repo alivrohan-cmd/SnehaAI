@@ -11,7 +11,9 @@ import com.sneha.ai.data.K
 import com.sneha.ai.data.Settings
 import com.sneha.ai.voice.SpeechInput
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +51,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val connOk = MutableStateFlow<Boolean?>(null)
     val testingConn = MutableStateFlow(false)
     val retryStatus = MutableStateFlow<String?>(null)
+    val handsFree = MutableStateFlow(false)
 
     private val stt = SpeechInput(a)
     private var thinkJob: Job? = null
@@ -123,7 +126,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val reply = p.reply.ifBlank { if (p.actions.isEmpty()) "…" else "ঠিক আছে, করছি।" }
         val badge = if (usedFallback) "$modelUsed (বিকল্প)" else modelUsed
         a.chat.add(ChatMsg(role = "model", text = reply, modelUsed = badge))
-        if (settings.value.autoSpeak) speak(reply)
+        val shouldContinueHandsFree = handsFree.value && p.actions.isEmpty()
+        if (settings.value.autoSpeak || handsFree.value) {
+            speak(reply) {
+                if (shouldContinueHandsFree && handsFree.value) {
+                    viewModelScope.launch(Dispatchers.Main) {
+                        delay(450)
+                        if (handsFree.value && !a.executor.busy) startListening()
+                    }
+                }
+            }
+        }
         if (p.rejected.isNotEmpty()) {
             a.chat.add(ChatMsg("sys", "অসমর্থিত অ্যাকশন বাদ দেওয়া হয়েছে: ${p.rejected.joinToString()}"))
         }
@@ -161,10 +174,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearChat() = a.chat.clear()
 
-    fun speak(text: String) {
+    fun speak(text: String, onDone: (() -> Unit)? = null) {
         val s = settings.value
-        if (!a.tts.speak(text, s.lang, s.speechRate, s.volume, s.voiceName)) {
+        if (!a.tts.speak(text, s.lang, s.speechRate, s.volume, s.voiceName, onDone)) {
             a.tts.error.value?.let { banner.value = it }
+        }
+    }
+
+    fun toggleHandsFree(enable: Boolean) {
+        handsFree.value = enable
+        if (enable) {
+            startListening()
+        } else {
+            stopListening()
         }
     }
 
@@ -186,7 +208,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 phase.value = Phase.Idle
                 partial.value = ""
                 level.value = 0f
-                banner.value = it
+                if (!handsFree.value) banner.value = it
             },
             onLevel = { level.value = it },
         )
@@ -196,6 +218,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun stopSpeaking() = a.tts.stop()
 
     fun stopAll() {
+        handsFree.value = false
         a.executor.cancel()
         a.tts.stop()
         thinkJob?.cancel()

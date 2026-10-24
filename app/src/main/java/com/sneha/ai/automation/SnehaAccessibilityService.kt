@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Intent
 import android.graphics.Path
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
@@ -12,10 +13,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
-/**
- * ব্যবহারকারী Android Accessibility Settings-এ নিজে চালু করলে তবেই কাজ করে।
- * কোনো ইভেন্ট/স্ক্রিন কনটেন্ট নিজে থেকে সংগ্রহ বা পাঠায় না — শুধু অনুমোদিত কাজের সময় স্ক্রিন পড়ে।
- */
 class SnehaAccessibilityService : AccessibilityService() {
 
     companion object {
@@ -29,7 +26,7 @@ class SnehaAccessibilityService : AccessibilityService() {
         connected.value = true
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* ইচ্ছাকৃতভাবে খালি: কিছু সংগ্রহ করা হয় না */ }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
     override fun onInterrupt() {}
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -45,6 +42,8 @@ class SnehaAccessibilityService : AccessibilityService() {
     fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
     fun back(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
     fun home(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+    fun lockScreen(): Boolean = if (Build.VERSION.SDK_INT >= 28) performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN) else false
+    fun openPowerDialog(): Boolean = performGlobalAction(GLOBAL_ACTION_POWER_DIALOG)
 
     private fun walk(n: AccessibilityNodeInfo?, depth: Int = 0, visit: (AccessibilityNodeInfo) -> Boolean): Boolean {
         if (n == null || depth > 40) return false
@@ -65,7 +64,6 @@ class SnehaAccessibilityService : AccessibilityService() {
         return null
     }
 
-    /** দৃশ্যমান টেক্সট/ডেসক্রিপশন দিয়ে এলিমেন্ট খুঁজে ACTION_CLICK পাঠায়। true = ক্লিক ডিসপ্যাচ হয়েছে (ফলাফল নয়)। */
     fun tapByText(text: String): Boolean {
         val root = rootInActiveWindow ?: return false
         for (n in root.findAccessibilityNodeInfosByText(text)) {
@@ -82,6 +80,41 @@ class SnehaAccessibilityService : AccessibilityService() {
             } else false
         }
         return done
+    }
+
+    suspend fun tapFirstYouTubeResult(query: String): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val dm = resources.displayMetrics
+        val minY = (dm.heightPixels * 0.18f).toInt()
+        val maxY = (dm.heightPixels * 0.85f).toInt()
+        val keywords = query.lowercase().split(" ").filter { it.length >= 3 }
+
+        var candidate: AccessibilityNodeInfo? = null
+        walk(root) { n ->
+            val bounds = Rect()
+            n.getBoundsInScreen(bounds)
+            val label = (n.text ?: n.contentDescription)?.toString().orEmpty()
+            val lower = label.lowercase()
+            val isTopBar = lower.contains("search") || lower.contains("filter") || lower.contains("সার্চ") || lower.contains("shorts")
+            if (!isTopBar && bounds.top in minY..maxY && bounds.height() > 80 && label.length >= 6) {
+                val matchesQuery = keywords.any { lower.contains(it) } ||
+                    lower.contains("minutes") || lower.contains("views") || lower.contains("play")
+                if (matchesQuery) {
+                    val clickable = clickableAncestor(n)
+                    if (clickable != null) {
+                        candidate = clickable
+                        return@walk true
+                    }
+                }
+            }
+            false
+        }
+
+        candidate?.let {
+            if (it.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+        }
+
+        return tapXY(dm.widthPixels / 2, (dm.heightPixels * 0.35f).toInt())
     }
 
     suspend fun tapXY(x: Int, y: Int): Boolean {
@@ -116,7 +149,6 @@ class SnehaAccessibilityService : AccessibilityService() {
         return gesture(p, 300)
     }
 
-    /** null = সফল (যাচাইসহ), নইলে ত্রুটির বার্তা */
     fun typeText(text: String): String? {
         val root = rootInActiveWindow ?: return "স্ক্রিন তথ্য পাওয়া যায়নি"
         var node: AccessibilityNodeInfo? = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf { it.isEditable }
@@ -140,7 +172,6 @@ class SnehaAccessibilityService : AccessibilityService() {
         return n.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
     }
 
-    /** দৃশ্যমান লেবেলের তালিকা (সর্বোচ্চ ৬০টি)। পাসওয়ার্ড ফিল্ড বাদ। ফোনেই দেখানো হয়, Gemini-তে পাঠানো হয় না। */
     fun readScreen(): List<String> {
         val out = mutableListOf<String>()
         val root = rootInActiveWindow ?: return out

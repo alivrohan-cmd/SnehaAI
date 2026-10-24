@@ -21,15 +21,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Message
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
@@ -72,6 +77,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
     val keySet by vm.keySet.collectAsStateWithLifecycle()
     val connOk by vm.connOk.collectAsStateWithLifecycle()
     val retryStatus by vm.retryStatus.collectAsStateWithLifecycle()
+    val handsFree by vm.handsFree.collectAsStateWithLifecycle()
     val a11yOn by SnehaAccessibilityService.connected.collectAsStateWithLifecycle()
 
     var input by remember { mutableStateOf("") }
@@ -81,7 +87,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
 
     val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { g ->
         if (g) vm.startListening()
-        else vm.banner.value = "মাইক্রোফোন অনুমতি ছাড়া ভয়েস ইনপুট চলবে না। টেক্সট ব্যবহার করুন, অথবা Settings > প্রাইভেসি থেকে অনুমতি দিন।"
+        else vm.banner.value = "মাইক্রোফোন অনুমতি ছাড়া ভয়েস ইনপুট চলবে না। Settings > পারমিশন থেকে অনুমতি দিন।"
     }
 
     fun onMic() {
@@ -115,7 +121,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Box(
                     modifier = Modifier
                         .size(10.dp)
@@ -155,14 +161,14 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                     }
                     Text(
                         text = when (ph) {
-                            Phase.Idle -> if (keySet) "প্রস্তুত • AI সহকারী" else "API Key সেট করা নেই"
+                            Phase.Idle -> if (handsFree) "হ্যান্ডস-ফ্রি ভয়েস মোড চালু" else if (keySet) "প্রস্তুত • ভয়েস অ্যাসিস্ট্যান্ট" else "API Key সেট করা নেই"
                             Phase.Listening -> "আপনার কথা শুনছি…"
                             Phase.Thinking -> retryStatus ?: "চিন্তা করছি…"
                             Phase.Speaking -> "কথা বলছি…"
                             Phase.Executing -> "কাজ করছি: ${exec.text}"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (retryStatus != null) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                        color = if (retryStatus != null || handsFree) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -170,6 +176,21 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        if (!handsFree && ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                            micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        } else {
+                            vm.toggleHandsFree(!handsFree)
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.HeadsetMic,
+                        contentDescription = "হ্যান্ডস-ফ্রি মোড",
+                        tint = if (handsFree) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 IconButton(onClick = { nav("coding") }) {
                     Icon(
                         imageVector = Icons.Default.Code,
@@ -256,7 +277,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                     }
                 } else if (ph == Phase.Idle && msgs.isEmpty()) {
                     Text(
-                        text = "অর্বে ট্যাপ করে কথা বলুন অথবা নিচে লিখুন",
+                        text = "অর্বে ট্যাপ করে কথা বলুন (যেমন: “মাকে ফোন করো” বা “একটা গান চালাও”)",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -314,8 +335,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                     .weight(1f)
                     .fillMaxWidth(),
                 onSend = { vm.send(it) },
-                onOpenApps = { showApps = true },
-                onNavCoding = { nav("coding") }
+                onOpenPerms = { nav("settings:privacy") }
             )
         } else {
             LazyColumn(
@@ -353,7 +373,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "কুইক অ্যাকশন ও টুলস",
+                            text = "অ্যাসিস্ট্যান্ট কন্ট্রোল ও টুলস",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -375,14 +395,16 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        ToolPill(Icons.Default.Call, "কল পারমিশন") { showTools = false; nav("settings:privacy") }
+                        ToolPill(Icons.Default.Message, "মেসেজ/SMS") { showTools = false; nav("settings:privacy") }
+                        ToolPill(Icons.Default.MusicNote, "বাংলা গান চালাও") { showTools = false; vm.send("একটা জনপ্রিয় বাংলা গান চালাও") }
                         ToolPill(Icons.Default.Apps, "অ্যাপ খোলো") { showTools = false; showApps = true }
-                        ToolPill(Icons.Default.MusicNote, "বাংলা গান চালাও") { showTools = false; vm.send("একটা বাংলা গান চালাও") }
+                        ToolPill(Icons.Default.Lock, "ফোন লক") { showTools = false; vm.send("ফোন লক করো") }
+                        ToolPill(Icons.Default.PowerSettingsNew, "পাওয়ার মেনু") { showTools = false; vm.send("ফোনের পাওয়ার মেনু খোলো") }
                         ToolPill(
                             icon = Icons.Default.TouchApp,
                             label = if (a11yOn) "অটোমেশন (চালু)" else "অটোমেশন (বন্ধ)"
                         ) { showTools = false; nav("settings:auto") }
-                        ToolPill(Icons.Default.Code, "কোডিং স্টুডিও") { showTools = false; nav("coding") }
-                        ToolPill(Icons.Default.Settings, "AI ও ভয়েস সেটিংস") { showTools = false; nav("settings") }
                     }
                 }
             }
@@ -416,7 +438,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                     modifier = Modifier.weight(1f),
                     placeholder = {
                         Text(
-                            "স্নেহাকে বাংলা বা ইংরেজিতে বলুন…",
+                            "স্নেহাকে বলুন (কল, মেসেজ, গান, অ্যাপ)…",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -478,17 +500,11 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
                         Text(p.reply, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(10.dp))
                     }
-                    Text("স্নেহা নিচের ধাপগুলো চালাতে চায়:", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("স্নেহা নিচের কাজটি করতে চায়:", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(4.dp))
                     p.actions.forEachIndexed { i, a ->
                         Text("${i + 1}. ${a.describe()}", style = MaterialTheme.typography.bodyMedium)
                     }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "চলার সময় নোটিফিকেশন অথবা উপরের লাল STOP বাটন চেপে যেকোনো মুহূর্তে থামাতে পারবেন।",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             },
             confirmButton = {
@@ -545,8 +561,7 @@ fun HomeScreen(vm: MainViewModel, nav: (String) -> Unit) {
 private fun WelcomeSuggestions(
     modifier: Modifier = Modifier,
     onSend: (String) -> Unit,
-    onOpenApps: () -> Unit,
-    onNavCoding: () -> Unit
+    onOpenPerms: () -> Unit
 ) {
     Column(
         modifier = modifier
@@ -562,17 +577,17 @@ private fun WelcomeSuggestions(
         )
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "আপনার ব্যক্তিগত AI সহকারী। নিচের যেকোনো একটি দিয়ে শুরু করতে পারেন:",
+            text = "আপনার ভয়েস-কন্ট্রোলড পার্সোনাল অ্যাসিস্ট্যান্ট:",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
         val suggestions = listOf(
-            "আজকের দিনটা সুন্দরভাবে প্ল্যান করে দাও" to { onSend("আজকের দিনটা সুন্দরভাবে প্ল্যান করে দাও") },
-            "একটা জনপ্রিয় বাংলা গান YouTube-এ চালাও" to { onSend("একটা জনপ্রিয় বাংলা গান চালাও") },
-            "ফোনের ইনস্টল করা অ্যাপ খোলো" to onOpenApps,
-            "Python বা HTML কোড লেখার জন্য কোডিং স্টুডিও খোলো" to onNavCoding
+            "📞 কল, মেসেজ ও মাইক্রোফোন পারমিশনগুলো এক ক্লিকে চালু করুন" to onOpenPerms,
+            "🎵 অরিজিৎ সিং-এর একটা জনপ্রিয় গান YouTube-এ চালাও" to { onSend("অরিজিৎ সিং এর একটা জনপ্রিয় গান চালাও") },
+            "💬 রাহুলকে মেসেজ দাও আমি ১০ মিনিট পরে আসছি" to { onSend("রাহুলকে মেসেজ দাও আমি ১০ মিনিট পরে আসছি") },
+            "🔒 আমার ফোনের স্ক্রিন লক করো" to { onSend("ফোন লক করো") }
         )
         suggestions.forEach { (label, action) ->
             Surface(

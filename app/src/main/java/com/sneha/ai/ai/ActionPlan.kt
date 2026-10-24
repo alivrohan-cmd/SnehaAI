@@ -5,8 +5,15 @@ import org.json.JSONObject
 
 sealed class Action {
     data class OpenApp(val app: String) : Action()
+    data class CallContact(val target: String) : Action()
+    data class SendSms(val target: String, val message: String, val direct: Boolean = false) : Action()
+    data class WhatsAppMsg(val target: String, val message: String) : Action()
     data class YouTubeSearch(val query: String, val playFirst: Boolean) : Action()
     data class Media(val cmd: String) : Action()
+    data class Volume(val dir: String) : Action()
+    data class SystemSetting(val panel: String) : Action()
+    object LockScreen : Action()
+    object PowerMenu : Action()
     data class TapText(val text: String) : Action()
     data class TapXY(val x: Int, val y: Int) : Action()
     data class Scroll(val down: Boolean) : Action()
@@ -21,15 +28,22 @@ sealed class Action {
 
 fun Action.isUi(): Boolean = when (this) {
     is Action.TapText, is Action.TapXY, is Action.Scroll, is Action.TypeText -> true
-    Action.Back, Action.Home, Action.Enter, Action.ReadScreen -> true
+    Action.Back, Action.Home, Action.Enter, Action.ReadScreen, Action.LockScreen, Action.PowerMenu -> true
     is Action.YouTubeSearch -> playFirst
     else -> false
 }
 
 fun Action.describe(): String = when (this) {
     is Action.OpenApp -> "অ্যাপ খোলা: $app"
-    is Action.YouTubeSearch -> "YouTube সার্চ: \"$query\"" + if (playFirst) " + প্রথম ফলাফল চালানো" else ""
+    is Action.CallContact -> "ফোন কল করা: $target"
+    is Action.SendSms -> "SMS পাঠানো ($target): \"$message\""
+    is Action.WhatsAppMsg -> "WhatsApp মেসেজ ($target): \"$message\""
+    is Action.YouTubeSearch -> "YouTube-এ গান/ভিডিও: \"$query\"" + if (playFirst) " (সরাসরি চালানো)" else ""
     is Action.Media -> "মিডিয়া কমান্ড: $cmd"
+    is Action.Volume -> "ভলিউম পরিবর্তন: $dir"
+    is Action.SystemSetting -> "সিস্টেম সেটিংস খোলা: $panel"
+    Action.LockScreen -> "ফোনের স্ক্রিন লক করা"
+    Action.PowerMenu -> "পাওয়ার/শাটডাউন মেনু খোলা"
     is Action.TapText -> "ট্যাপ: \"$text\""
     is Action.TapXY -> "ট্যাপ: ($x,$y)"
     is Action.Scroll -> "স্ক্রল " + if (down) "নিচে" else "উপরে"
@@ -37,13 +51,21 @@ fun Action.describe(): String = when (this) {
     Action.Home -> "Home-এ যাওয়া"
     is Action.TypeText -> "লেখা: \"$text\""
     Action.Enter -> "Enter চাপা"
-    Action.ReadScreen -> "স্ক্রিনের লেবেল পড়া (শুধু ফোনে দেখানো হবে)"
+    Action.ReadScreen -> "স্ক্রিনের লেবেল পড়া"
     is Action.Wait -> "অপেক্ষা ${ms}ms"
     is Action.Remember -> "মনে রাখা: \"$text\""
 }
 
 data class Plan(val reply: String, val actions: List<Action>, val rejected: List<String>) {
-    fun needsConfirm(): Boolean = actions.any { it.isUi() || it is Action.Remember }
+    fun needsConfirm(): Boolean = actions.any {
+        when (it) {
+            is Action.CallContact -> true
+            is Action.SendSms -> it.direct
+            is Action.TapText, is Action.TapXY, is Action.TypeText -> true
+            Action.PowerMenu, is Action.Remember -> true
+            else -> false
+        }
+    }
 }
 
 object PlanParser {
@@ -67,11 +89,33 @@ object PlanParser {
             val t = a.optString("type").trim()
             val act: Action? = when (t) {
                 "open_app" -> a.optString("app").trim().takeIf { it.isNotBlank() }?.let { Action.OpenApp(it.take(60)) }
+                "call_contact" -> a.optString("target").trim().ifBlank { a.optString("name").trim() }
+                    .takeIf { it.isNotBlank() }?.let { Action.CallContact(it.take(80)) }
+                "send_sms" -> {
+                    val target = a.optString("target").trim().ifBlank { a.optString("name").trim() }
+                    val msg = a.optString("message").trim().ifBlank { a.optString("text").trim() }
+                    if (target.isNotBlank() && msg.isNotBlank()) {
+                        Action.SendSms(target.take(80), msg.take(400), a.optBoolean("direct", false))
+                    } else null
+                }
+                "whatsapp_msg" -> {
+                    val target = a.optString("target").trim().ifBlank { a.optString("name").trim() }
+                    val msg = a.optString("message").trim().ifBlank { a.optString("text").trim() }
+                    if (msg.isNotBlank()) Action.WhatsAppMsg(target.take(80), msg.take(500)) else null
+                }
                 "youtube_search" -> a.optString("query").trim().takeIf { it.isNotBlank() }
-                    ?.let { Action.YouTubeSearch(it.take(120), a.optBoolean("play_first", false)) }
+                    ?.let { Action.YouTubeSearch(it.take(120), a.optBoolean("play_first", true)) }
                 "media" -> a.optString("command").trim().lowercase()
                     .takeIf { it in setOf("play", "pause", "next", "previous") }
                     ?.let { Action.Media(it) }
+                "volume" -> a.optString("direction").trim().lowercase()
+                    .takeIf { it in setOf("up", "down", "mute", "unmute") }
+                    ?.let { Action.Volume(it) }
+                "system_setting" -> a.optString("panel").trim().lowercase()
+                    .takeIf { it in setOf("wifi", "bluetooth", "sound", "display", "location", "airplane") }
+                    ?.let { Action.SystemSetting(it) }
+                "lock_screen" -> Action.LockScreen
+                "power_menu" -> Action.PowerMenu
                 "ui_tap_text" -> a.optString("text").trim().takeIf { it.isNotBlank() }?.let { Action.TapText(it.take(80)) }
                 "ui_tap_xy" -> {
                     val x = a.optInt("x", -1)

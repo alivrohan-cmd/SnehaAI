@@ -7,7 +7,6 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 
-/** Android SpeechRecognizer র‍্যাপার। মাইক বাটন চাপলেই শোনে; ব্যাকগ্রাউন্ডে নীরবে রেকর্ড করে না। মেইন থ্রেডে ব্যবহার করুন। */
 class SpeechInput(private val ctx: Context) {
     private var rec: SpeechRecognizer? = null
 
@@ -21,7 +20,10 @@ class SpeechInput(private val ctx: Context) {
         onLevel: (Float) -> Unit,
     ) {
         release()
-        if (!available()) { onError("এই ফোনে স্পিচ রিকগনিশন সার্ভিস নেই (Google অ্যাপ/Speech Services ইনস্টল করুন)"); return }
+        if (!available()) {
+            onError("এই ফোনে স্পিচ রিকগনিশন সার্ভিস নেই (Google অ্যাপ/Speech Services ইনস্টল করুন)")
+            return
+        }
         val r = SpeechRecognizer.createSpeechRecognizer(ctx)
         rec = r
         r.setRecognitionListener(object : RecognitionListener {
@@ -38,7 +40,7 @@ class SpeechInput(private val ctx: Context) {
                         SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "স্পিচ রিকগনিশনে নেটওয়ার্ক সমস্যা"
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "মাইক্রোফোন অনুমতি নেই"
                         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "রিকগনাইজার ব্যস্ত, একটু পরে চেষ্টা করুন"
-                        12, 13 -> "এই ভাষা এই ফোনের স্পিচ রিকগনিশনে সমর্থিত/ডাউনলোড করা নেই"
+                        12, 13 -> "এই ভাষা এই ফোনের স্পিচ রিকগনিশনে ডাউনলোড করা নেই"
                         else -> "স্পিচ রিকগনিশন ত্রুটি ($code)"
                     }
                 )
@@ -53,16 +55,16 @@ class SpeechInput(private val ctx: Context) {
             }
             override fun onEvent(t: Int, b: Bundle?) {}
         })
-        val tag = if (lang == "bn") "bn-IN" else "en-IN"
+        val tag = if (lang == "bn") "bn-BD" else "en-US"
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, tag)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, tag)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         r.startListening(i)
     }
 
-    /** বলা শেষ করার সংকেত — চূড়ান্ত ফলাফল তখনও আসবে */
     fun stop() { rec?.stopListening() }
 
     fun release() {

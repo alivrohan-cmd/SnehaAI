@@ -61,12 +61,12 @@ private data class SettingSection(
 
 private val sections = listOf(
     SettingSection("ai", "AI Brain (Google Gemini)", "API Key, মডেল বাছাই, অটো-ফলব্যাক ও Test Connection", Icons.Default.Psychology),
-    SettingSection("voice", "ভয়েস ও উচ্চারণ", "বাংলা/ইংরেজি কণ্ঠস্বর, গতি ও ভলিউম", Icons.Default.RecordVoiceOver),
-    SettingSection("auto", "স্ক্রিন অটোমেশন", "Accessibility সার্ভিস ও জরুরি STOP নিয়ন্ত্রণ", Icons.Default.AccessibilityNew),
+    SettingSection("privacy", "পারমিশন সেটআপ ও প্রাইভেসি", "কল, কন্টাক্টস, SMS, মাইক ও Accessibility পারমিশন", Icons.Default.Security),
+    SettingSection("voice", "ভয়েস ও উচ্চারণ", "বাংলা/ইংরেজি কণ্ঠস্বর, হ্যান্ডস-ফ্রি ও গতি", Icons.Default.RecordVoiceOver),
+    SettingSection("auto", "স্ক্রিন অটোমেশন ও সিস্টেম কন্ট্রোল", "Accessibility, স্ক্রিন লক, পাওয়ার মেনু ও STOP", Icons.Default.AccessibilityNew),
     SettingSection("apps", "অ্যাপ্লিকেশন তালিকা", "প্রিয় অ্যাপ নির্বাচন ও দ্রুত চালু", Icons.Default.Apps),
     SettingSection("coding", "কোডিং রানটাইম", "WebView স্যান্ডবক্স ও Termux ইন্টিগ্রেশন", Icons.Default.Code),
     SettingSection("memory", "ব্যক্তিগত মেমরি", "সংরক্ষিত তথ্য দেখা, এডিট ও এক্সপোর্ট", Icons.Default.Memory),
-    SettingSection("privacy", "প্রাইভেসি ও নিরাপত্তা", "পারমিশন ড্যাশবোর্ড ও ডেটা নীতিমালা", Icons.Default.Security),
     SettingSection("look", "থিম ও ফন্ট", "ডার্ক/লাইট থিম, লেখার আকার ও অ্যানিমেশন", Icons.Default.Palette),
     SettingSection("notif", "নোটিফিকেশন", "অটোমেশন স্ট্যাটাস ও STOP নোটিফিকেশন", Icons.Default.Notifications),
     SettingSection("about", "অ্যাপ পরিচিতি (About)", "সংস্করণ, ফিচারের প্রকৃত অবস্থা ও তথ্য", Icons.Default.Info)
@@ -311,7 +311,7 @@ fun AiPage(vm: MainViewModel) {
             SwitchRow("প্রাথমিক মডেলে অতিরিক্ত চাপ (503/429) থাকলে বিকল্প মডেলে চেষ্টা করো", s.autoFallback) {
                 vm.set(K.autoFallback, it)
             }
-            Note("বিকল্প মডেলটি শুধুমাত্র আপনার API key-এর যাচাইকৃত তালিকা (listModels) থেকে বেছে নেওয়া হয়। কোনো মডেল অনুমান করা হয় না।")
+            Note("বিকল্প মডেলটি শুধুমাত্র আপনার API key-এর যাচাইকৃত তালিকা (listModels) থেকে বেছে নেওয়া হয়।")
             if (s.autoFallback && models.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text("পছন্দের বিকল্প (Fallback) মডেল: ${s.fallbackModel}", style = MaterialTheme.typography.bodySmall)
@@ -323,7 +323,6 @@ fun AiPage(vm: MainViewModel) {
 
         SecCard("৪. জেনারেশন প্যারামিটার ও ভাষা") {
             SwitchRow("কাস্টম Temperature পাঠাও", s.useTemperature) { vm.set(K.useTemp, it) }
-            Note("নতুন Gemini 3.6+ মডেল কাস্টম temperature গ্রহণ না করলে অ্যাপ নিজে থেকেই তা বাদ দিয়ে পুনরায় চেষ্টা করে।")
             if (s.useTemperature) {
                 PrefSlider("Temperature", s.temperature, 0f..1f, { "%.1f".format(it) }) { vm.set(K.temperature, it) }
             }
@@ -335,13 +334,6 @@ fun AiPage(vm: MainViewModel) {
             RadioRow("বাংলা (Bengali)", s.lang == "bn") { vm.set(K.lang, "bn") }
             RadioRow("English", s.lang == "en") { vm.set(K.lang, "en") }
         }
-
-        SecCard("৫. ব্যবহার পরিসংখ্যান (এই ফোনে)") {
-            Text(
-                "মোট সফল অনুরোধ: ${s.reqCount}\nইনপুট টোকেন: ${s.tokensIn} • আউটপুট টোকেন: ${s.tokensOut}",
-                style = MaterialTheme.typography.bodyMedium
-            )
-        }
     }
 }
 
@@ -350,18 +342,20 @@ fun VoicePage(vm: MainViewModel) {
     val ctx = LocalContext.current
     val a = ctx.applicationContext as SnehaApp
     val s by vm.settings.collectAsStateWithLifecycle()
+    val handsFree by vm.handsFree.collectAsStateWithLifecycle()
     var tick by remember { mutableIntStateOf(0) }
     val voices = remember(s.lang, tick) { a.tts.voices(s.lang) }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("কণ্ঠস্বর ও উচ্চারণ") {
+        SecCard("কণ্ঠস্বর ও হ্যান্ডস-ফ্রি মোড") {
             SwitchRow("স্নেহার উত্তর জোরে পড়ে শোনাও (Auto-Speak)", s.autoSpeak) { vm.set(K.autoSpeak, it) }
+            SwitchRow("হ্যান্ডস-ফ্রি ভয়েস লুপ (উত্তর বলা শেষ হলে আবার শুনবে)", handsFree) { vm.toggleHandsFree(it) }
             PrefSlider("কথার গতি", s.speechRate, 0.5f..2f, { "%.1fx".format(it) }) { vm.set(K.rate, it) }
             PrefSlider("ভলিউম", s.volume, 0f..1f, { "${(it * 100).toInt()}%" }) { vm.set(K.volume, it) }
         }
 
         SecCard("কণ্ঠস্বর নির্বাচন") {
-            Note("Android TTS ইঞ্জিন ভয়েসের লিঙ্গ আলাদাভাবে জানায় না। তালিকা থেকে একটি বেছে 'ভয়েস টেস্ট' চেপে শুনে আপনার পছন্দের নারী কণ্ঠস্বরটি বেছে নিন।")
+            Note("তালিকা থেকে একটি বেছে 'ভয়েস টেস্ট' চেপে শুনে আপনার পছন্দের নারী কণ্ঠস্বরটি বেছে নিন।")
             RadioRow("সিস্টেম ডিফল্ট", s.voiceName.isBlank()) { vm.set(K.voice, "") }
             voices.forEach { RadioRow(it, s.voiceName == it) { vm.set(K.voice, it) } }
             Spacer(Modifier.height(8.dp))
@@ -375,14 +369,6 @@ fun VoicePage(vm: MainViewModel) {
             OutlinedButton(onClick = { openIntent(ctx, Intent("com.android.settings.TTS_SETTINGS"), vm) }) {
                 Text("ফোনের TTS ইঞ্জিন সেটিংস খুলুন")
             }
-        }
-
-        SecCard("ভয়েস ইনপুট (মাইক্রোফোন)") {
-            Text(
-                "স্পিচ রিকগনিশন সার্ভিস: " + if (SpeechRecognizer.isRecognitionAvailable(ctx)) "✓ উপলব্ধ" else "✗ এই ফোনে উপলব্ধ নয়",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Note("শুধুমাত্র আপনি মাইক বাটনে বা অর্বে ট্যাপ করলে মাইক্রোফোন চালু হয়। ব্যাকগ্রাউন্ডে গোপনে কোনো অডিও রেকর্ড করা হয় না।")
         }
     }
 }
@@ -420,14 +406,6 @@ fun AutoPage(vm: MainViewModel) {
                 "১. উপরের বাটনে চাপুন → 'Installed apps' বা 'Downloaded apps' → Sneha AI বেছে নিন।\n" +
                     "২. Android 13+ এ সরাসরি APK ইনস্টল করলে সুইচ ধূসর (Restricted) থাকতে পারে। সেক্ষেত্রে ফোনের Settings > Apps > Sneha AI > উপরের ডানে (⋮) মেনু > 'Allow restricted settings' চালু করুন।\n" +
                     "৩. এরপর আবার Accessibility সেটিংসে গিয়ে Sneha AI চালু করুন।"
-            )
-        }
-
-        SecCard("নিরাপত্তা ও সীমাবদ্ধতা") {
-            Note(
-                "• ব্যাংকিং/পেমেন্ট অ্যাপ (bKash, Nagad ইত্যাদি), পাসওয়ার্ড ম্যানেজার, লক স্ক্রিন ও সিস্টেম সেটিংসে অটোমেশন সম্পূর্ণ ব্লক থাকে।\n" +
-                    "• প্রতিটি স্ক্রিন অ্যাকশনের আগে আপনার অনুমোদন নেওয়া হয়।\n" +
-                    "• অন্য অ্যাপকে Force-stop করা বা লক স্ক্রিন আনলক করা সাধারণ Android অ্যাপের পক্ষে সম্ভব নয়।"
             )
         }
     }
@@ -484,13 +462,9 @@ fun CodingSettingsPage(vm: MainViewModel) {
             Button(onClick = { permLauncher.launch(TermuxRunner.PERM) }, enabled = installed && !perm) {
                 Text("RUN_COMMAND অনুমতি দিন")
             }
-            Note(
-                "HTML/CSS/JS অ্যাপের ভেতরেই স্যান্ডবক্স WebView-এ চলে। Python, C, C++, Java, Bash চালাতে চাইলে ফোনে Termux থাকতে হবে এবং প্রতিবার কমান্ড দেখে আপনি অনুমোদন দিলে তবেই চলবে।"
-            )
         }
 
         SecCard("সংরক্ষিত প্রজেক্ট (${projects.size})") {
-            Text(a.projects.root.absolutePath, style = MaterialTheme.typography.bodySmall)
             if (projects.isEmpty()) Note("এখনো কোনো প্রজেক্ট সেভ করা হয়নি।")
             projects.forEach { p ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -520,12 +494,11 @@ fun MemoryPage(vm: MainViewModel) {
     Column(Modifier.verticalScroll(rememberScrollState())) {
         SecCard("মেমরি নিয়ন্ত্রণ") {
             SwitchRow("স্নেহার মেমরি চালু রাখুন", s.memoryEnabled) { vm.set(K.memory, it) }
-            Note("শুধুমাত্র আপনার অনুমোদিত পছন্দগুলো ফোনের স্টোরেজে থাকে। পাসওয়ার্ড/OTP/API key কখনো মেমরিতে রাখা হয় না।")
             OutlinedTextField(
                 value = newText,
                 onValueChange = { newText = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("নতুন তথ্য যোগ করুন (যেমন: আমার প্রিয় রঙ নীল)") }
+                label = { Text("নতুন তথ্য যোগ করুন (যেমন: আমাকে ভাইয়া বলে ডাকবে)") }
             )
             Spacer(Modifier.height(6.dp))
             Button(
@@ -578,32 +551,60 @@ fun MemoryPage(vm: MainViewModel) {
 fun PrivacyPage(vm: MainViewModel) {
     val ctx = LocalContext.current
     val a = ctx.applicationContext as SnehaApp
-    val tick = resumeTick()
+    var permTick by remember { mutableIntStateOf(0) }
+    val tick = resumeTick() + permTick
     val a11y by SnehaAccessibilityService.connected.collectAsStateWithLifecycle()
-    val exec by vm.exec.collectAsStateWithLifecycle()
     val mic = remember(tick) { granted(ctx, Manifest.permission.RECORD_AUDIO) }
+    val contacts = remember(tick) { granted(ctx, Manifest.permission.READ_CONTACTS) }
+    val phone = remember(tick) { granted(ctx, Manifest.permission.CALL_PHONE) }
+    val sms = remember(tick) { granted(ctx, Manifest.permission.SEND_SMS) }
     val notif = remember(tick) { Build.VERSION.SDK_INT < 33 || granted(ctx, Manifest.permission.POST_NOTIFICATIONS) }
     val termuxPerm = remember(tick) { a.termux.hasPermission() }
-    fun yn(b: Boolean) = if (b) "✓ চালু/অনুমোদিত" else "✗ বন্ধ"
+
+    val multiLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        permTick++
+    }
+
+    fun yn(b: Boolean) = if (b) "✓ চালু আছে" else "✗ দেওয়া হয়নি"
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("পারমিশন ড্যাশবোর্ড") {
-            Text("মাইক্রোফোন: ${yn(mic)}")
-            Text("Accessibility (স্ক্রিন অটোমেশন): ${yn(a11y)}")
-            Text("নোটিফিকেশন: ${yn(notif)}")
-            Text("Termux RUN_COMMAND: ${yn(termuxPerm)}")
-            Text("চলমান অটোমেশন: ${if (exec.running) "হ্যাঁ (${exec.text})" else "না"}")
+        SecCard("১-ক্লিকে সব অ্যাসিস্ট্যান্ট পারমিশন চালু করুন") {
+            Note("ভয়েস কমান্ড দিয়ে কল করা, কন্টাক্ট খোঁজা, মেসেজ পাঠানো এবং নোটিফিকেশনের জন্য নিচের বাটনে চাপুন:")
+            Button(
+                onClick = {
+                    val list = mutableListOf(
+                        Manifest.permission.RECORD_AUDIO,
+                        Manifest.permission.READ_CONTACTS,
+                        Manifest.permission.CALL_PHONE,
+                        Manifest.permission.SEND_SMS
+                    )
+                    if (Build.VERSION.SDK_INT >= 33) list.add(Manifest.permission.POST_NOTIFICATIONS)
+                    multiLauncher.launch(list.toTypedArray())
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("সব প্রয়োজনীয় পারমিশন দিন (মাইক, কল, কন্টাক্টস, SMS)")
+            }
+        }
+
+        SecCard("পারমিশন স্ট্যাটাস ড্যাশবোর্ড") {
+            Text("🎙️ মাইক্রোফোন (ভয়েস কমান্ড): ${yn(mic)}")
+            Text("👥 কন্টাক্টস (নাম দিয়ে নম্বর খোঁজা): ${yn(contacts)}")
+            Text("📞 ফোন কল (সরাসরি কল করা): ${yn(phone)}")
+            Text("💬 SMS (মেসেজ পাঠানো): ${yn(sms)}")
+            Text("🔔 নোটিফিকেশন: ${yn(notif)}")
+            Text("👆 Accessibility (স্ক্রিন অটোমেশন, লক ও YouTube অটো-প্লে): ${yn(a11y)}")
+            Text("💻 Termux RUN_COMMAND: ${yn(termuxPerm)}")
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     openIntent(ctx, Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")), vm)
-                }) { Text("অ্যাপ পারমিশন") }
-                OutlinedButton(onClick = { openIntent(ctx, Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS), vm) }) { Text("Accessibility") }
+                }) { Text("অ্যাপ পারমিশন সেটিংস") }
+                OutlinedButton(onClick = { openIntent(ctx, Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS), vm) }) { Text("Accessibility চালু করুন") }
             }
         }
 
         SecCard("চ্যাট ইতিহাস ও ডেটা") {
-            Note("আপনার চ্যাট ইতিহাস এবং মেমরি শুধুমাত্র ফোনের নিজস্ব স্টোরেজে সংরক্ষিত থাকে।")
             OutlinedButton(onClick = { vm.clearChat() }) { Text("সম্পূর্ণ চ্যাট ইতিহাস মুছে ফেলুন") }
         }
     }
@@ -621,7 +622,6 @@ fun LookPage(vm: MainViewModel) {
         SecCard("ফন্ট ও অ্যানিমেশন") {
             PrefSlider("লেখার আকার (Font Scale)", s.fontScale, 0.85f..1.40f, { "%.2fx".format(it) }) { vm.set(K.fontScale, it) }
             SwitchRow("অ্যানিমেশন কমান (ব্যাটারি সাশ্রয় মোড)", s.reduceMotion) { vm.set(K.reduceMotion, it) }
-            Note("Idle অবস্থায় অর্ব অ্যানিমেশন স্বয়ংক্রিয়ভাবেই বন্ধ থাকে যাতে ফোনের ব্যাটারি খরচ না হয়।")
         }
     }
 }
@@ -651,7 +651,7 @@ fun NotifPage(vm: MainViewModel) {
 fun AboutPage() {
     val ctx = LocalContext.current
     val ver = remember {
-        try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "0.2.0" }
+        try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "0.3.0" }
     }
     Column(Modifier.verticalScroll(rememberScrollState())) {
         SecCard("Sneha AI (স্নেহা) — v$ver") {
@@ -660,11 +660,12 @@ fun AboutPage() {
         }
         SecCard("ফিচারের প্রকৃত অবস্থা") {
             Note(
-                "• Gemini কথোপকথন, Exponential Backoff রি-ট্রাই, যাচাইকৃত মডেল ফলব্যাক ও Retry বাটন: সংযোজিত\n" +
-                    "• ফিউচারিস্টিক গ্লাসমরফিক UI ও অ্যানিমেটেড অর্ব: সংযোজিত\n" +
-                    "• ভয়েস ইনপুট (STT) ও আউটপুট (TTS): সংযোজিত\n" +
-                    "• অ্যাপ খোলা, YouTube হ্যান্ডঅফ ও Accessibility অটোমেশন: সংযোজিত\n" +
-                    "• কোডিং মোড (WebView স্যান্ডবক্স + ঐচ্ছিক Termux): সংযোজিত"
+                "• ভয়েস কমান্ড ও হ্যান্ডস-ফ্রি ভয়েস লুপ (bn-BD/bn-IN/en): সংযোজিত\n" +
+                    "• কন্টাক্টস থেকে নাম খুঁজে সরাসরি ফোন কল ও ডায়ালার: সংযোজিত\n" +
+                    "• SMS পাঠানো, ড্রাফট খোলা ও WhatsApp মেসেজ হ্যান্ডঅফ: সংযোজিত\n" +
+                    "• YouTube ও YouTube Music-এ সরাসরি গান চালানো ও অডিও যাচাই: সংযোজিত\n" +
+                    "• স্ক্রিন লক, পাওয়ার/শাটডাউন মেনু, ভলিউম ও সিস্টেম সেটিংস: সংযোজিত\n" +
+                    "• ১-ক্লিক পারমিশন সেটআপ হাব: সংযোজিত"
             )
         }
     }
