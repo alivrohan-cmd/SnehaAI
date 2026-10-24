@@ -61,15 +61,15 @@ private data class SettingSection(
 
 private val sections = listOf(
     SettingSection("ai", "AI Brain (Google Gemini)", "API Key, মডেল বাছাই, অটো-ফলব্যাক ও Test Connection", Icons.Default.Psychology),
-    SettingSection("privacy", "পারমিশন সেটআপ ও প্রাইভেসি", "কল, কন্টাক্টস, SMS, মাইক ও Accessibility পারমিশন", Icons.Default.Security),
-    SettingSection("voice", "ভয়েস ও উচ্চারণ", "বাংলা/ইংরেজি কণ্ঠস্বর, হ্যান্ডস-ফ্রি ও গতি", Icons.Default.RecordVoiceOver),
-    SettingSection("auto", "স্ক্রিন অটোমেশন ও সিস্টেম কন্ট্রোল", "Accessibility, স্ক্রিন লক, পাওয়ার মেনু ও STOP", Icons.Default.AccessibilityNew),
-    SettingSection("apps", "অ্যাপ্লিকেশন তালিকা", "প্রিয় অ্যাপ নির্বাচন ও দ্রুত চালু", Icons.Default.Apps),
+    SettingSection("privacy", "১০০% পারমিশন সেটআপ হাব", "কল, কন্টাক্টস, SMS, মাইক ও Accessibility পারমিশন", Icons.Default.Security),
+    SettingSection("voice", "ভয়েস ও ডোরেমন ওয়েক-মোড", "বাংলা/ইংরেজি কণ্ঠস্বর, অটো-লিসেনিং ও গতি", Icons.Default.RecordVoiceOver),
+    SettingSection("auto", "স্ক্রিন অটোমেশন ও সিস্টেম কন্ট্রোল", "গেম ইনস্টল, WhatsApp সেন্ড, স্ক্রিন লক ও পাওয়ার মেনু", Icons.Default.AccessibilityNew),
+    SettingSection("apps", "সব ইনস্টল করা অ্যাপ্লিকেশন", "প্রিয় অ্যাপ নির্বাচন ও দ্রুত চালু", Icons.Default.Apps),
     SettingSection("coding", "কোডিং রানটাইম", "WebView স্যান্ডবক্স ও Termux ইন্টিগ্রেশন", Icons.Default.Code),
     SettingSection("memory", "ব্যক্তিগত মেমরি", "সংরক্ষিত তথ্য দেখা, এডিট ও এক্সপোর্ট", Icons.Default.Memory),
     SettingSection("look", "থিম ও ফন্ট", "ডার্ক/লাইট থিম, লেখার আকার ও অ্যানিমেশন", Icons.Default.Palette),
     SettingSection("notif", "নোটিফিকেশন", "অটোমেশন স্ট্যাটাস ও STOP নোটিফিকেশন", Icons.Default.Notifications),
-    SettingSection("about", "অ্যাপ পরিচিতি (About)", "সংস্করণ, ফিচারের প্রকৃত অবস্থা ও তথ্য", Icons.Default.Info)
+    SettingSection("about", "অ্যাপ পরিচিতি (About Doreman)", "সংস্করণ, ফিচারের প্রকৃত অবস্থা ও তথ্য", Icons.Default.Info)
 )
 
 @Composable
@@ -91,7 +91,7 @@ fun SettingsScreen(vm: MainViewModel, initial: String?, onBack: () -> Unit) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "পেছনে")
             }
             Text(
-                text = sections.firstOrNull { it.key == page }?.title ?: "সেটিংস ও নিয়ন্ত্রণ",
+                text = sections.firstOrNull { it.key == page }?.title ?: "Doreman সেটিংস",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -257,7 +257,7 @@ fun AiPage(vm: MainViewModel) {
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
         SecCard("১. Gemini API Key ও সংযোগ") {
-            Note("আপনার API key ফোনের Android Keystore (AES-256-GCM) দিয়ে এনক্রিপ্ট করে রাখা হয়। সোর্স কোড বা APK-তে কোনো কী নেই।")
+            Note("আপনার API key ফোনের Android Keystore (AES-256-GCM) দিয়ে এনক্রিপ্ট করে রাখা হয়।")
             OutlinedTextField(
                 value = key,
                 onValueChange = { key = it },
@@ -291,7 +291,7 @@ fun AiPage(vm: MainViewModel) {
         SecCard("২. প্রাথমিক মডেল নির্বাচন") {
             Text("বর্তমান প্রাথমিক মডেল: ${s.model}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             if (models.isEmpty()) {
-                Note("উপরে 'Test Connection' চাপলে আপনার API key-এর জন্য অনুমোদিত ও সক্রিয় সব Gemini মডেলের যাচাইকৃত তালিকা এখানে দেখাবে।")
+                Note("উপরে 'Test Connection' চাপলে আপনার API key-এর জন্য অনুমোদিত সব Gemini মডেলের তালিকা দেখাবে।")
             } else {
                 Spacer(Modifier.height(4.dp))
                 models.forEach { m ->
@@ -300,9 +300,9 @@ fun AiPage(vm: MainViewModel) {
             }
         }
 
-        SecCard("৩. High Demand (503) রি-ট্রাই ও যাচাইকৃত বিকল্প মডেল") {
+        SecCard("৩. High Demand (503) রি-ট্রাই ও বিকল্প মডেল") {
             PrefSlider(
-                label = "স্বয়ংক্রিয় পুনরায় চেষ্টা (Exponential Backoff Retries)",
+                label = "স্বয়ংক্রিয় পুনরায় চেষ্টা (Retries)",
                 value = s.maxRetries.toFloat(),
                 range = 0f..5f,
                 fmt = { "${it.toInt()} বার" }
@@ -311,7 +311,6 @@ fun AiPage(vm: MainViewModel) {
             SwitchRow("প্রাথমিক মডেলে অতিরিক্ত চাপ (503/429) থাকলে বিকল্প মডেলে চেষ্টা করো", s.autoFallback) {
                 vm.set(K.autoFallback, it)
             }
-            Note("বিকল্প মডেলটি শুধুমাত্র আপনার API key-এর যাচাইকৃত তালিকা (listModels) থেকে বেছে নেওয়া হয়।")
             if (s.autoFallback && models.isNotEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 Text("পছন্দের বিকল্প (Fallback) মডেল: ${s.fallbackModel}", style = MaterialTheme.typography.bodySmall)
@@ -319,20 +318,6 @@ fun AiPage(vm: MainViewModel) {
                     RadioRow(m, m == s.fallbackModel) { vm.set(K.fallbackModel, m) }
                 }
             }
-        }
-
-        SecCard("৪. জেনারেশন প্যারামিটার ও ভাষা") {
-            SwitchRow("কাস্টম Temperature পাঠাও", s.useTemperature) { vm.set(K.useTemp, it) }
-            if (s.useTemperature) {
-                PrefSlider("Temperature", s.temperature, 0f..1f, { "%.1f".format(it) }) { vm.set(K.temperature, it) }
-            }
-            PrefSlider("সর্বোচ্চ আউটপুট টোকেন", s.maxTokens.toFloat(), 512f..8192f, { it.toInt().toString() }) {
-                vm.set(K.maxTokens, it.toInt())
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("কথোপকথনের প্রধান ভাষা:", style = MaterialTheme.typography.bodyMedium)
-            RadioRow("বাংলা (Bengali)", s.lang == "bn") { vm.set(K.lang, "bn") }
-            RadioRow("English", s.lang == "en") { vm.set(K.lang, "en") }
         }
     }
 }
@@ -347,21 +332,20 @@ fun VoicePage(vm: MainViewModel) {
     val voices = remember(s.lang, tick) { a.tts.voices(s.lang) }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("কণ্ঠস্বর ও হ্যান্ডস-ফ্রি মোড") {
-            SwitchRow("স্নেহার উত্তর জোরে পড়ে শোনাও (Auto-Speak)", s.autoSpeak) { vm.set(K.autoSpeak, it) }
-            SwitchRow("হ্যান্ডস-ফ্রি ভয়েস লুপ (উত্তর বলা শেষ হলে আবার শুনবে)", handsFree) { vm.toggleHandsFree(it) }
+        SecCard("কণ্ঠস্বর ও অটো-লিসেনিং (Siri মোড)") {
+            SwitchRow("Doreman-এর উত্তর জোরে পড়ে শোনাও (Auto-Speak)", s.autoSpeak) { vm.set(K.autoSpeak, it) }
+            SwitchRow("সর্বদা শোনা ও ওয়েক মোড (চাপ না দিয়েই কথা শুনবে)", handsFree) { vm.toggleHandsFree(it) }
             PrefSlider("কথার গতি", s.speechRate, 0.5f..2f, { "%.1fx".format(it) }) { vm.set(K.rate, it) }
             PrefSlider("ভলিউম", s.volume, 0f..1f, { "${(it * 100).toInt()}%" }) { vm.set(K.volume, it) }
         }
 
         SecCard("কণ্ঠস্বর নির্বাচন") {
-            Note("তালিকা থেকে একটি বেছে 'ভয়েস টেস্ট' চেপে শুনে আপনার পছন্দের নারী কণ্ঠস্বরটি বেছে নিন।")
             RadioRow("সিস্টেম ডিফল্ট", s.voiceName.isBlank()) { vm.set(K.voice, "") }
             voices.forEach { RadioRow(it, s.voiceName == it) { vm.set(K.voice, it) } }
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = {
-                    vm.speak(if (s.lang == "bn") "নমস্কার, আমি স্নেহা। আমার কথা পরিষ্কার শুনতে পাচ্ছেন?" else "Hello, I am Sneha. Can you hear me clearly?")
+                    vm.speak(if (s.lang == "bn") "হ্যালো, আমি ডোরেমন। বলুন আপনার জন্য কী করতে পারি?" else "Hello, I am Doreman. How can I help you?")
                 }) { Text("ভয়েস টেস্ট") }
                 OutlinedButton(onClick = { tick++ }) { Text("তালিকা রিফ্রেশ") }
             }
@@ -388,24 +372,13 @@ fun AutoPage(vm: MainViewModel) {
             Button(onClick = { openIntent(ctx, Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS), vm) }) {
                 Text("Android Accessibility সেটিংস খুলুন")
             }
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { vm.stopAll() },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("■ চলমান অটোমেশন থামাও") }
-                OutlinedButton(
-                    onClick = { SnehaAccessibilityService.instance?.disableSelf() },
-                    enabled = on
-                ) { Text("সার্ভিস বন্ধ করুন") }
-            }
         }
 
         SecCard("চালু করার নিয়ম (Infinix / Android 13+)") {
             Note(
-                "১. উপরের বাটনে চাপুন → 'Installed apps' বা 'Downloaded apps' → Sneha AI বেছে নিন।\n" +
-                    "২. Android 13+ এ সরাসরি APK ইনস্টল করলে সুইচ ধূসর (Restricted) থাকতে পারে। সেক্ষেত্রে ফোনের Settings > Apps > Sneha AI > উপরের ডানে (⋮) মেনু > 'Allow restricted settings' চালু করুন।\n" +
-                    "৩. এরপর আবার Accessibility সেটিংসে গিয়ে Sneha AI চালু করুন।"
+                "১. উপরের বাটনে চাপুন → 'Installed apps' বা 'Downloaded apps' → Doreman বেছে নিন।\n" +
+                    "২. সুইচ ধূসর (Restricted) থাকলে ফোনের Settings > Apps > Doreman > উপরের ডানে (⋮) মেনু > 'Allow restricted settings' চালু করুন।\n" +
+                    "৩. এরপর আবার Accessibility সেটিংসে গিয়ে Doreman চালু করুন। এটি চালু থাকলেই Doreman নিজে থেকে Play Store থেকে গেম ইনস্টল ও WhatsApp-এ মেসেজ সেন্ড করতে পারবে।"
             )
         }
     }
@@ -421,7 +394,6 @@ fun AppsPage(vm: MainViewModel) {
     }
     Column {
         OutlinedTextField(q, { q = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("ইনস্টল করা অ্যাপ খুঁজুন") })
-        Note("চেকবক্সে টিক দিলে অ্যাপটি প্রিয় তালিকায় থাকবে।")
         LazyColumn(Modifier.weight(1f)) {
             items(apps.filter { it.label.contains(q, true) }, key = { it.pkg }) { ap ->
                 Row(
@@ -449,12 +421,10 @@ fun CodingSettingsPage(vm: MainViewModel) {
     val tick = resumeTick()
     val installed = remember(tick) { a.termux.installed() }
     val perm = remember(tick) { a.termux.hasPermission() }
-    var projTick by remember { mutableIntStateOf(0) }
-    val projects = remember(projTick) { a.projects.list() }
     val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("Termux কোড রানটাইম (ঐচ্ছিক)") {
+        SecCard("Termux কোড রানটাইম") {
             SwitchRow("Termux দিয়ে কোড চালানো চালু", s.termuxEnabled) { vm.set(K.termux, it) }
             Text("Termux অ্যাপ: " + if (installed) "✓ ইনস্টল আছে" else "✗ ইনস্টল নেই")
             Text("RUN_COMMAND অনুমতি: " + if (perm) "✓ দেওয়া আছে" else "✗ দেওয়া হয়নি")
@@ -463,94 +433,48 @@ fun CodingSettingsPage(vm: MainViewModel) {
                 Text("RUN_COMMAND অনুমতি দিন")
             }
         }
-
-        SecCard("সংরক্ষিত প্রজেক্ট (${projects.size})") {
-            if (projects.isEmpty()) Note("এখনো কোনো প্রজেক্ট সেভ করা হয়নি।")
-            projects.forEach { p ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("$p (${a.projects.files(p).size} ফাইল)", Modifier.weight(1f))
-                    TextButton(onClick = { a.projects.delete(p); projTick++ }) { Text("মুছুন") }
-                }
-            }
-        }
     }
 }
 
 @Composable
 fun MemoryPage(vm: MainViewModel) {
-    val ctx = LocalContext.current
-    val a = ctx.applicationContext as SnehaApp
+    val a = LocalContext.current.applicationContext as SnehaApp
     val s by vm.settings.collectAsStateWithLifecycle()
     val items by vm.memory.collectAsStateWithLifecycle()
     var newText by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf<String?>(null) }
-    var editId by remember { mutableStateOf<String?>(null) }
-    var editText by remember { mutableStateOf("") }
-    var confirmClear by remember { mutableStateOf(false) }
-    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        uri?.let { ctx.contentResolver.openOutputStream(it)?.use { o -> o.write(a.memory.exportJson().toByteArray()) } }
-    }
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
         SecCard("মেমরি নিয়ন্ত্রণ") {
-            SwitchRow("স্নেহার মেমরি চালু রাখুন", s.memoryEnabled) { vm.set(K.memory, it) }
+            SwitchRow("Doreman-এর মেমরি চালু রাখুন", s.memoryEnabled) { vm.set(K.memory, it) }
             OutlinedTextField(
                 value = newText,
                 onValueChange = { newText = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("নতুন তথ্য যোগ করুন (যেমন: আমাকে ভাইয়া বলে ডাকবে)") }
+                label = { Text("নতুন তথ্য যোগ করুন") }
             )
             Spacer(Modifier.height(6.dp))
             Button(
                 onClick = {
-                    err = a.memory.add(newText)
-                    if (err == null) newText = ""
+                    if (a.memory.add(newText) == null) newText = ""
                 },
                 enabled = newText.isNotBlank()
             ) { Text("যোগ করুন") }
-            err?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
         }
 
         SecCard("সংরক্ষিত তথ্য (${items.size})") {
-            if (items.isEmpty()) Note("কোনো তথ্য সংরক্ষিত নেই।")
             items.forEach { e ->
-                if (editId == e.id) {
-                    OutlinedTextField(editText, { editText = it }, Modifier.fillMaxWidth())
-                    Row {
-                        Button(onClick = { err = a.memory.update(e.id, editText); if (err == null) editId = null }) { Text("সেভ") }
-                        TextButton(onClick = { editId = null }) { Text("বাতিল") }
-                    }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(e.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        TextButton(onClick = { editId = e.id; editText = e.text }) { Text("এডিট") }
-                        TextButton(onClick = { a.memory.delete(e.id) }) { Text("মুছুন") }
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(e.text, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { a.memory.delete(e.id) }) { Text("মুছুন") }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { export.launch("sneha_memory.json") }) { Text("JSON এক্সপোর্ট") }
-                OutlinedButton(onClick = { confirmClear = true }, enabled = items.isNotEmpty()) { Text("সব মুছুন") }
-            }
         }
-    }
-
-    if (confirmClear) {
-        AlertDialog(
-            onDismissRequest = { confirmClear = false },
-            title = { Text("সব মেমরি মুছে ফেলবেন?") },
-            text = { Text("এটি মুছে ফেললে আর ফেরানো যাবে না।") },
-            confirmButton = { Button(onClick = { a.memory.clear(); confirmClear = false }) { Text("মুছুন") } },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("বাতিল") } }
-        )
     }
 }
 
 @Composable
 fun PrivacyPage(vm: MainViewModel) {
     val ctx = LocalContext.current
-    val a = ctx.applicationContext as SnehaApp
     var permTick by remember { mutableIntStateOf(0) }
     val tick = resumeTick() + permTick
     val a11y by SnehaAccessibilityService.connected.collectAsStateWithLifecycle()
@@ -559,7 +483,6 @@ fun PrivacyPage(vm: MainViewModel) {
     val phone = remember(tick) { granted(ctx, Manifest.permission.CALL_PHONE) }
     val sms = remember(tick) { granted(ctx, Manifest.permission.SEND_SMS) }
     val notif = remember(tick) { Build.VERSION.SDK_INT < 33 || granted(ctx, Manifest.permission.POST_NOTIFICATIONS) }
-    val termuxPerm = remember(tick) { a.termux.hasPermission() }
 
     val multiLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         permTick++
@@ -568,8 +491,7 @@ fun PrivacyPage(vm: MainViewModel) {
     fun yn(b: Boolean) = if (b) "✓ চালু আছে" else "✗ দেওয়া হয়নি"
 
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("১-ক্লিকে সব অ্যাসিস্ট্যান্ট পারমিশন চালু করুন") {
-            Note("ভয়েস কমান্ড দিয়ে কল করা, কন্টাক্ট খোঁজা, মেসেজ পাঠানো এবং নোটিফিকেশনের জন্য নিচের বাটনে চাপুন:")
+        SecCard("১-ক্লিকে সব পারমিশন চালু করুন") {
             Button(
                 onClick = {
                     val list = mutableListOf(
@@ -583,29 +505,24 @@ fun PrivacyPage(vm: MainViewModel) {
                 },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("সব প্রয়োজনীয় পারমিশন দিন (মাইক, কল, কন্টাক্টস, SMS)")
+                Text("১০০% পারমিশন দিন (মাইক, কল, কন্টাক্টস, SMS)")
             }
         }
 
-        SecCard("পারমিশন স্ট্যাটাস ড্যাশবোর্ড") {
-            Text("🎙️ মাইক্রোফোন (ভয়েস কমান্ড): ${yn(mic)}")
-            Text("👥 কন্টাক্টস (নাম দিয়ে নম্বর খোঁজা): ${yn(contacts)}")
-            Text("📞 ফোন কল (সরাসরি কল করা): ${yn(phone)}")
-            Text("💬 SMS (মেসেজ পাঠানো): ${yn(sms)}")
+        SecCard("পারমিশন স্ট্যাটাস") {
+            Text("🎙️ মাইক্রোফোন: ${yn(mic)}")
+            Text("👥 কন্টাক্টস (Baba/বাবা খোঁজা): ${yn(contacts)}")
+            Text("📞 সরাসরি ফোন কল: ${yn(phone)}")
+            Text("💬 সরাসরি SMS: ${yn(sms)}")
             Text("🔔 নোটিফিকেশন: ${yn(notif)}")
-            Text("👆 Accessibility (স্ক্রিন অটোমেশন, লক ও YouTube অটো-প্লে): ${yn(a11y)}")
-            Text("💻 Termux RUN_COMMAND: ${yn(termuxPerm)}")
+            Text("👆 Accessibility (গেম ইনস্টল ও WhatsApp সেন্ড): ${yn(a11y)}")
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
                     openIntent(ctx, Intent(AndroidSettings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")), vm)
-                }) { Text("অ্যাপ পারমিশন সেটিংস") }
+                }) { Text("অ্যাপ পারমিশন") }
                 OutlinedButton(onClick = { openIntent(ctx, Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS), vm) }) { Text("Accessibility চালু করুন") }
             }
-        }
-
-        SecCard("চ্যাট ইতিহাস ও ডেটা") {
-            OutlinedButton(onClick = { vm.clearChat() }) { Text("সম্পূর্ণ চ্যাট ইতিহাস মুছে ফেলুন") }
         }
     }
 }
@@ -619,54 +536,24 @@ fun LookPage(vm: MainViewModel) {
             RadioRow("লাইট (Clean Daylight)", s.theme == "light") { vm.set(K.theme, "light") }
             RadioRow("সিস্টেম ডিফল্ট", s.theme == "system") { vm.set(K.theme, "system") }
         }
-        SecCard("ফন্ট ও অ্যানিমেশন") {
-            PrefSlider("লেখার আকার (Font Scale)", s.fontScale, 0.85f..1.40f, { "%.2fx".format(it) }) { vm.set(K.fontScale, it) }
-            SwitchRow("অ্যানিমেশন কমান (ব্যাটারি সাশ্রয় মোড)", s.reduceMotion) { vm.set(K.reduceMotion, it) }
-        }
     }
 }
 
 @Composable
 fun NotifPage(vm: MainViewModel) {
-    val ctx = LocalContext.current
     val s by vm.settings.collectAsStateWithLifecycle()
-    val tick = resumeTick()
-    val ok = remember(tick) { Build.VERSION.SDK_INT < 33 || granted(ctx, Manifest.permission.POST_NOTIFICATIONS) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     Column(Modifier.verticalScroll(rememberScrollState())) {
         SecCard("অটোমেশন নোটিফিকেশন") {
-            SwitchRow("অটোমেশন চলাকালীন STOP বাটনসহ নোটিফিকেশন দেখাও", s.notifyAutomation) { vm.set(K.notify, it) }
-            Text("নোটিফিকেশন অনুমতি: " + if (ok) "✓ দেওয়া আছে" else "✗ দেওয়া নেই")
-            if (!ok) {
-                Spacer(Modifier.height(6.dp))
-                Button(onClick = { if (Build.VERSION.SDK_INT >= 33) launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }) {
-                    Text("নোটিফিকেশন অনুমতি দিন")
-                }
-            }
+            SwitchRow("অটোমেশন চলাকালীন STOP নোটিফিকেশন দেখাও", s.notifyAutomation) { vm.set(K.notify, it) }
         }
     }
 }
 
 @Composable
 fun AboutPage() {
-    val ctx = LocalContext.current
-    val ver = remember {
-        try { ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName } catch (e: Exception) { "0.3.0" }
-    }
     Column(Modifier.verticalScroll(rememberScrollState())) {
-        SecCard("Sneha AI (স্নেহা) — v$ver") {
-            Text("প্যাকেজ: com.sneha.ai • Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            Note("মস্তিষ্ক: Google Gemini API • UI: Jetpack Compose + Material 3")
-        }
-        SecCard("ফিচারের প্রকৃত অবস্থা") {
-            Note(
-                "• ভয়েস কমান্ড ও হ্যান্ডস-ফ্রি ভয়েস লুপ (bn-BD/bn-IN/en): সংযোজিত\n" +
-                    "• কন্টাক্টস থেকে নাম খুঁজে সরাসরি ফোন কল ও ডায়ালার: সংযোজিত\n" +
-                    "• SMS পাঠানো, ড্রাফট খোলা ও WhatsApp মেসেজ হ্যান্ডঅফ: সংযোজিত\n" +
-                    "• YouTube ও YouTube Music-এ সরাসরি গান চালানো ও অডিও যাচাই: সংযোজিত\n" +
-                    "• স্ক্রিন লক, পাওয়ার/শাটডাউন মেনু, ভলিউম ও সিস্টেম সেটিংস: সংযোজিত\n" +
-                    "• ১-ক্লিক পারমিশন সেটআপ হাব: সংযোজিত"
-            )
+        SecCard("Doreman AI — v1.0.0") {
+            Text("আপনার ভয়েস-কন্ট্রোলড Siri-স্টাইল পার্সোনাল অ্যাসিস্ট্যান্ট")
         }
     }
 }

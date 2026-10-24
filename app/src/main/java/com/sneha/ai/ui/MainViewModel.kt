@@ -51,21 +51,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val connOk = MutableStateFlow<Boolean?>(null)
     val testingConn = MutableStateFlow(false)
     val retryStatus = MutableStateFlow<String?>(null)
-    val handsFree = MutableStateFlow(false)
+    val handsFree = MutableStateFlow(true)
+    val lastSpokenReply = MutableStateFlow("")
 
     private val stt = SpeechInput(a)
     private var thinkJob: Job? = null
 
+    private val wakeWords = listOf(
+        "doreman", "doraemon", "doremon", "ডোরেমন", "ডরেমন", "দোরেমন", "hey doreman", "হে ডোরেমন"
+    )
+
     fun send(text: String, isRetry: Boolean = false) {
-        val t = text.trim()
-        if (t.isEmpty()) return
+        val raw = text.trim()
+        if (raw.isEmpty()) return
+
+        val cleanedCmd = stripWakeWord(raw)
+        if (cleanedCmd.isBlank()) {
+            val greet = "হ্যাঁ বলুন, আমি শুনছি!"
+            lastSpokenReply.value = greet
+            speak(greet) {
+                if (handsFree.value) scheduleNextListen(400)
+            }
+            return
+        }
+
         a.tts.stop()
         thinkJob?.cancel()
         thinkJob = viewModelScope.launch {
             if (isRetry) {
-                a.chat.removeErrorsForRetry(t)
+                a.chat.removeErrorsForRetry(cleanedCmd)
             } else {
-                a.chat.add(ChatMsg("user", t))
+                a.chat.add(ChatMsg("user", cleanedCmd))
             }
             phase.value = Phase.Thinking
             banner.value = null
@@ -74,7 +90,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val s = settings.value
             val hist = a.chat.items.value
                 .filter { (it.role == "user" || it.role == "model") && !it.isError }
-                .takeLast(14)
+                .takeLast(12)
             val sys = SystemPrompt.build(
                 s,
                 if (s.memoryEnabled) a.memory.items.value else emptyList(),
@@ -105,17 +121,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 if (aiErr?.kind == AiError.INVALID_KEY || aiErr?.kind == AiError.NO_KEY) {
                     connOk.value = false
                 }
-                val friendly = aiErr?.userMessage() ?: "সংযোগ বা সার্ভার ত্রুটি: অনুগ্রহ করে আবার চেষ্টা করুন।"
-                a.chat.add(
-                    ChatMsg(
-                        role = "sys",
-                        text = friendly,
-                        isError = true,
-                        retryPrompt = t
-                    )
-                )
+                val friendly = aiErr?.userMessage() ?: "সংযোগ বা সার্ভার ত্রুটি: আবার চেষ্টা করুন।"
+                lastSpokenReply.value = friendly
+                banner.value = friendly
+                if (handsFree.value) scheduleNextListen(2000)
             }
         }
+    }
+
+    private fun stripWakeWord(input: String): String {
+        var s = input.trim()
+        for (w in wakeWords) {
+            if (s.equals(w, true)) return ""
+            if (s.lowercase().startsWith("$w ")) {
+                s = s.substring(w.length).trim()
+            }
+        }
+        return s
     }
 
     fun retry(prompt: String) {
@@ -126,31 +148,40 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val reply = p.reply.ifBlank { if (p.actions.isEmpty()) "…" else "ঠিক আছে, করছি।" }
         val badge = if (usedFallback) "$modelUsed (বিকল্প)" else modelUsed
         a.chat.add(ChatMsg(role = "model", text = reply, modelUsed = badge))
-        val shouldContinueHandsFree = handsFree.value && p.actions.isEmpty()
+        lastSpokenReply.value = reply
+
+        val hasActions = p.actions.isNotEmpty()
         if (settings.value.autoSpeak || handsFree.value) {
             speak(reply) {
-                if (shouldContinueHandsFree && handsFree.value) {
-                    viewModelScope.launch(Dispatchers.Main) {
-                        delay(450)
-                        if (handsFree.value && !a.executor.busy) startListening()
-                    }
+                if (handsFree.value && !hasActions && !a.executor.busy) {
+                    scheduleNextListen(450)
                 }
             }
         }
-        if (p.rejected.isNotEmpty()) {
-            a.chat.add(ChatMsg("sys", "অসমর্থিত অ্যাকশন বাদ দেওয়া হয়েছে: ${p.rejected.joinToString()}"))
+        if (hasActions) {
+            runActions(p.actions)
         }
-        if (p.actions.isEmpty()) return
-        if (p.needsConfirm()) pending.value = p else runActions(p.actions)
     }
 
     private fun runActions(list: List<Action>) {
-        if (a.executor.busy) {
-            banner.value = "আরেকটি কাজ চলছে। আগে Stop চাপুন।"
-            return
-        }
+        if (a.executor.busy) a.executor.cancel()
         a.executor.run(list) { log, _ ->
-            a.chat.add(ChatMsg("sys", log.joinToString("\n")))
+            val summary = log.lastOrNull() ?: ""
+            if (summary.isNotBlank()) {
+                lastSpokenReply.value = summary
+            }
+            if (handsFree.value) {
+                scheduleNextListen(1200)
+            }
+        }
+    }
+
+    private fun scheduleNextListen(delayMs: Long) {
+        viewModelScope.launch(Dispatchers.Main) {
+            delay(delayMs)
+            if (handsFree.value && !a.executor.busy && phase.value == Phase.Idle && !a.tts.speaking.value) {
+                startListening()
+            }
         }
     }
 
@@ -161,23 +192,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deny() {
-        if (pending.value != null) a.chat.add(ChatMsg("sys", "■ আপনি অ্যাকশন বাতিল করেছেন"))
         pending.value = null
     }
 
     fun openApp(name: String) {
         viewModelScope.launch {
             val r = a.launcher.open(name, settings.value.favorites)
-            a.chat.add(ChatMsg("sys", (if (r.ok) "✓ " else "✗ ") + r.msg))
+            lastSpokenReply.value = r.msg
         }
     }
 
-    fun clearChat() = a.chat.clear()
+    fun clearChat() {
+        a.chat.clear()
+        lastSpokenReply.value = ""
+    }
 
     fun speak(text: String, onDone: (() -> Unit)? = null) {
         val s = settings.value
         if (!a.tts.speak(text, s.lang, s.speechRate, s.volume, s.voiceName, onDone)) {
             a.tts.error.value?.let { banner.value = it }
+            onDone?.invoke()
         }
     }
 
@@ -208,7 +242,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 phase.value = Phase.Idle
                 partial.value = ""
                 level.value = 0f
-                if (!handsFree.value) banner.value = it
+                if (handsFree.value) {
+                    scheduleNextListen(900)
+                } else {
+                    banner.value = it
+                }
             },
             onLevel = { level.value = it },
         )

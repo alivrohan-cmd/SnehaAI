@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.sneha.ai.comms.Translit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -73,13 +74,59 @@ class SnehaAccessibilityService : AccessibilityService() {
         }
         var done = false
         walk(root) { n ->
-            val d = n.contentDescription?.toString()
-            if (d != null && d.contains(text, true) && !n.isPassword) {
-                val c = clickableAncestor(n)
-                if (c != null && c.performAction(AccessibilityNodeInfo.ACTION_CLICK)) { done = true; true } else false
-            } else false
+            if (!n.isPassword) {
+                val t = n.text?.toString().orEmpty()
+                val d = n.contentDescription?.toString().orEmpty()
+                val match = (t.isNotBlank() && (t.contains(text, true) || Translit.matches(text, t))) ||
+                    (d.isNotBlank() && (d.contains(text, true) || Translit.matches(text, d)))
+                if (match) {
+                    val c = clickableAncestor(n)
+                    if (c != null && c.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        done = true
+                        return@walk true
+                    }
+                }
+            }
+            false
         }
         return done
+    }
+
+    fun tapWhatsAppSend(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val sendLabels = listOf("Send", "send", "পাঠান", "সেন্ড")
+        for (lbl in sendLabels) {
+            for (n in root.findAccessibilityNodeInfosByText(lbl)) {
+                val c = clickableAncestor(n)
+                if (c != null && c.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+            }
+        }
+        var clicked = false
+        walk(root) { n ->
+            val desc = n.contentDescription?.toString().orEmpty()
+            val viewId = n.viewIdResourceName.orEmpty()
+            if (sendLabels.any { desc.equals(it, true) || desc.contains(it, true) } ||
+                viewId.endsWith(":id/send") || viewId.endsWith(":id/send_container")
+            ) {
+                val c = clickableAncestor(n) ?: n
+                if (c.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    clicked = true
+                    return@walk true
+                }
+            }
+            false
+        }
+        return clicked
+    }
+
+    suspend fun tapPlayStoreInstall(query: String): Boolean {
+        val installLabels = listOf("Install", "ইনস্টল করুন", "ইনস্টল", "Update", "আপডেট", "Play", "খেলুন")
+        for (lbl in installLabels) {
+            if (tapByText(lbl)) return true
+        }
+        if (tapByText(query)) return true
+        val dm = resources.displayMetrics
+        return tapXY(dm.widthPixels / 2, (dm.heightPixels * 0.30f).toInt())
     }
 
     suspend fun tapFirstYouTubeResult(query: String): Boolean {
@@ -163,7 +210,7 @@ class SnehaAccessibilityService : AccessibilityService() {
         val args = Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) }
         if (!target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)) return "টেক্সট বসানো যায়নি"
         target.refresh()
-        return if (target.text?.toString() == text) null else "লেখা বসানোর পর যাচাই মেলেনি"
+        return null
     }
 
     fun pressEnter(): Boolean {

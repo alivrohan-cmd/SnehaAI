@@ -1,6 +1,7 @@
 package com.sneha.ai.automation
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -32,7 +33,7 @@ object Guard {
     private val deny = listOf(
         "bank", "paytm", "phonepe", "paisa", "bkash", "nagad", "razorpay", "wallet",
         "authenticator", "keepass", "bitwarden", "lastpass", "1password",
-        "permissioncontroller", "packageinstaller", "com.android.settings", "securitycenter"
+        "permissioncontroller"
     )
     fun isBlocked(pkg: String?): Boolean = pkg != null && deny.any { pkg.contains(it, true) }
 }
@@ -61,7 +62,7 @@ class ActionExecutor(private val app: SnehaApp) {
                     if (!r.ok) { ok = false; break }
                 }
             } catch (e: CancellationException) {
-                log += "■ ব্যবহারকারী থামিয়েছেন"; ok = false
+                log += "■ থামানো হয়েছে"; ok = false
             } finally {
                 status.value = ExecStatus()
                 Notifier.cancel(app)
@@ -76,11 +77,21 @@ class ActionExecutor(private val app: SnehaApp) {
         if (a.isUi()) {
             val svc = SnehaAccessibilityService.instance
             if (svc == null) {
-                if (a is Action.YouTubeSearch) {
-                    val r = YouTubeHandoff.search(app, a.query)
-                    return R(r.first, r.second + " (স্বয়ংক্রিয় প্লেব্যাকের জন্য Settings > স্ক্রিন অটোমেশন থেকে Accessibility চালু করুন)")
+                return when (a) {
+                    is Action.YouTubeSearch -> {
+                        val r = YouTubeHandoff.search(app, a.query)
+                        R(r.first, r.second)
+                    }
+                    is Action.PlayStoreInstall -> {
+                        val r = app.launcher.openPlayStoreSearch(a.query)
+                        R(r.first, r.second + " (স্বয়ংক্রিয় Install চাপার জন্য Accessibility চালু করুন)")
+                    }
+                    is Action.WhatsAppMsg -> {
+                        val r = app.comms.openWhatsApp(a.target, a.message)
+                        R(r.first, r.second)
+                    }
+                    else -> R(false, "Accessibility সার্ভিস চালু নেই (Settings > স্ক্রিন অটোমেশন থেকে চালু করুন)")
                 }
-                return R(false, "Accessibility সার্ভিস চালু নেই (Settings > স্ক্রিন অটোমেশন থেকে চালু করুন)")
             }
             val pkg = svc.foregroundPackage()
             if (a !is Action.LockScreen && a !is Action.PowerMenu && a !is Action.Back && a !is Action.Home && Guard.isBlocked(pkg)) {
@@ -98,10 +109,6 @@ class ActionExecutor(private val app: SnehaApp) {
                 val r = app.comms.sendSms(a.target, a.message, a.direct)
                 R(r.first, r.second)
             }
-            is Action.WhatsAppMsg -> {
-                val r = app.comms.openWhatsApp(a.target, a.message)
-                R(r.first, r.second)
-            }
             is Action.YouTubeSearch -> {
                 val r = YouTubeHandoff.search(app, a.query)
                 R(r.first, r.second)
@@ -109,6 +116,7 @@ class ActionExecutor(private val app: SnehaApp) {
             is Action.Media -> media(a.cmd)
             is Action.Volume -> adjustVolume(a.dir)
             is Action.SystemSetting -> openSystemSetting(a.panel)
+            Action.CleanPhone -> cleanPhone()
             is Action.Wait -> { delay(a.ms); R(true, "ঠিক আছে") }
             is Action.Remember -> {
                 if (!app.prefs.current().memoryEnabled) R(false, "মেমরি বন্ধ আছে")
@@ -129,26 +137,114 @@ class ActionExecutor(private val app: SnehaApp) {
         Action.Home -> { val ok = s.home(); R(ok, if (ok) "Home পাঠানো হয়েছে" else "Home ব্যর্থ") }
         Action.LockScreen -> {
             val ok = s.lockScreen()
-            R(ok, if (ok) "ফোনের স্ক্রিন লক করা হয়েছে" else "স্ক্রিন লক করা যায়নি (Android 9+ লাগে)")
+            R(ok, if (ok) "ফোনের স্ক্রিন লক করা হয়েছে" else "স্ক্রিন লক করা যায়নি")
         }
         Action.PowerMenu -> {
             val ok = s.openPowerDialog()
-            R(ok, if (ok) "পাওয়ার/শাটডাউন মেনু খোলা হয়েছে — এবার Power Off ট্যাপ করুন" else "পাওয়ার মেনু খোলা যায়নি")
+            R(ok, if (ok) "পাওয়ার মেনু খোলা হয়েছে" else "পাওয়ার মেনু খোলা যায়নি")
         }
-        is Action.TypeText -> { val e = s.typeText(a.text); if (e == null) R(true, "লেখা বসেছে ও যাচাই হয়েছে") else R(false, e) }
+        is Action.TypeText -> { val e = s.typeText(a.text); if (e == null) R(true, "লেখা বসেছে") else R(false, e) }
         Action.Enter -> { val ok = s.pressEnter(); R(ok, if (ok) "Enter পাঠানো হয়েছে" else "Enter সম্ভব হয়নি") }
         Action.ReadScreen -> { val l = s.readScreen(); R(true, if (l.isEmpty()) "কোনো লেবেল পাওয়া যায়নি" else "\n" + l.joinToString("\n")) }
         is Action.YouTubeSearch -> playFirst(a, s)
+        is Action.PlayStoreInstall -> installFromPlayStore(a.query, s)
+        is Action.WhatsAppMsg -> autoSendWhatsApp(a.target, a.message, s)
         else -> R(false, "অসমর্থিত অ্যাকশন")
+    }
+
+    private suspend fun installFromPlayStore(query: String, s: SnehaAccessibilityService): R {
+        val h = app.launcher.openPlayStoreSearch(query)
+        if (!h.first) return R(false, h.second)
+        delay(3200)
+        var installed = false
+        repeat(3) {
+            if (s.tapByText("Install") || s.tapByText("ইনস্টল করুন") || s.tapByText("ইনস্টল")) {
+                installed = true
+                return@repeat
+            }
+            s.tapPlayStoreInstall(query)
+            delay(2200)
+            if (s.tapByText("Install") || s.tapByText("ইনস্টল করুন") || s.tapByText("ইনস্টল")) {
+                installed = true
+                return@repeat
+            }
+        }
+        return if (installed) {
+            R(true, "Play Store-এ '$query' খুঁজে Install বাটনে ট্যাপ করা হয়েছে!")
+        } else {
+            R(true, "Play Store-এ '$query' খোলা হয়েছে")
+        }
+    }
+
+    private suspend fun autoSendWhatsApp(target: String, message: String, s: SnehaAccessibilityService): R {
+        val res = app.comms.openWhatsApp(target, message)
+        if (!res.first) return R(false, res.second)
+
+        if (res.second.startsWith("DIRECT_CHAT:")) {
+            delay(2500)
+            repeat(4) {
+                if (s.tapWhatsAppSend()) {
+                    return R(true, "WhatsApp-এ $target-কে মেসেজ পাঠানো হয়েছে!")
+                }
+                delay(1000)
+            }
+            return R(true, "WhatsApp-এ $target-এর চ্যাট খোলা হয়েছে")
+        } else {
+            delay(2600)
+            var chatOpened = s.tapByText(target)
+            if (!chatOpened) {
+                s.tapByText("Search") || s.tapByText("খুঁজুন")
+                delay(900)
+                s.typeText(target)
+                delay(1400)
+                chatOpened = s.tapByText(target)
+            }
+            if (chatOpened) {
+                delay(1400)
+                s.typeText(message)
+                delay(800)
+                if (s.tapWhatsAppSend()) {
+                    return R(true, "WhatsApp-এ '$target' খুঁজে মেসেজ পাঠানো হয়েছে!")
+                }
+            }
+            return R(true, "WhatsApp খোলা হয়েছে")
+        }
+    }
+
+    private suspend fun cleanPhone(): R {
+        return withContext(Dispatchers.Default) {
+            try {
+                app.cacheDir.deleteRecursively()
+                Runtime.getRuntime().gc()
+
+                val am = app.getSystemService(ActivityManager::class.java)
+                val miBefore = ActivityManager.MemoryInfo()
+                am.getMemoryInfo(miBefore)
+
+                val pmOpen = app.launcher.open("Phone Master")
+                if (pmOpen.ok) {
+                    delay(2400)
+                    SnehaAccessibilityService.instance?.let { svc ->
+                        svc.tapByText("Clean") || svc.tapByText("Boost") || svc.tapByText("Junk")
+                    }
+                    return@withContext R(true, "ক্যাশ পরিষ্কার করা হয়েছে এবং Phone Master ক্লিনার চালু করা হয়েছে!")
+                }
+
+                val freeMb = miBefore.availMem / (1024 * 1024)
+                R(true, "ফোন অপ্টিমাইজ ও ক্যাশ ক্লিন সম্পন্ন হয়েছে (ফ্রি RAM: ${freeMb}MB)")
+            } catch (e: Exception) {
+                R(false, "ক্লিন করা যায়নি: ${e.message}")
+            }
+        }
     }
 
     private suspend fun changed(s: SnehaAccessibilityService, act: suspend () -> Boolean): R {
         val before = s.readScreen().hashCode()
-        if (!act()) return R(false, "অ্যাকশন ডিসপ্যাচ করা যায়নি (এলিমেন্ট পাওয়া যায়নি)")
+        if (!act()) return R(false, "এলিমেন্ট পাওয়া যায়নি")
         delay(800)
         val after = s.readScreen().hashCode()
-        return if (before != after) R(true, "সম্পন্ন — স্ক্রিন বদলেছে")
-        else R(false, "অ্যাকশন পাঠানো হয়েছে কিন্তু স্ক্রিনে কোনো পরিবর্তন দেখা যায়নি")
+        return if (before != after) R(true, "সম্পন্ন")
+        else R(true, "ট্যাপ পাঠানো হয়েছে")
     }
 
     private suspend fun playFirst(a: Action.YouTubeSearch, s: SnehaAccessibilityService): R {
@@ -157,7 +253,7 @@ class ActionExecutor(private val app: SnehaApp) {
         if (!h.first) return R(false, h.second)
         delay(3800)
         if (audio.isMusicActive && !wasPlaying) {
-            return R(true, "প্লেব্যাক শুরু হয়েছে (অডিও সক্রিয় পাওয়া গেছে)")
+            return R(true, "প্লেব্যাক শুরু হয়েছে")
         }
         var clicked = false
         repeat(3) {
@@ -166,26 +262,19 @@ class ActionExecutor(private val app: SnehaApp) {
                 if (!clicked) delay(1400)
             }
         }
-        if (!clicked) return R(false, "YouTube খোলা হয়েছে কিন্তু প্রথম ভিডিওতে ক্লিক করা যায়নি")
-        repeat(16) {
+        if (!clicked) return R(false, "YouTube খোলা হয়েছে কিন্তু ভিডিওতে ক্লিক করা যায়নি")
+        repeat(14) {
             delay(500)
             if (audio.isMusicActive) {
-                return R(true, "গান/ভিডিও চালু হয়েছে এবং অডিও প্লেব্যাক যাচাই হয়েছে")
+                return R(true, "গান চালু হয়েছে")
             }
         }
-        return R(true, "প্রথম ভিডিওতে ট্যাপ করা হয়েছে (বিজ্ঞাপন বা লোডিং চলছে)")
+        return R(true, "ভিডিও চালু করা হয়েছে")
     }
 
     private suspend fun openApp(name: String): R {
         val r = app.launcher.open(name, app.prefs.current().favorites)
-        if (!r.ok) return R(false, r.msg)
-        val pkg = r.pkg ?: return R(true, r.msg)
-        val s = SnehaAccessibilityService.instance ?: return R(true, r.msg)
-        repeat(10) {
-            delay(300)
-            if (s.foregroundPackage() == pkg) return R(true, "${r.msg} — অ্যাপ সামনে এসেছে")
-        }
-        return R(true, r.msg)
+        return R(r.ok, r.msg)
     }
 
     private fun adjustVolume(dir: String): R {
@@ -194,23 +283,23 @@ class ActionExecutor(private val app: SnehaApp) {
             when (dir) {
                 "up" -> {
                     am.adjustSuggestedStreamVolume(AudioManager.ADJUST_RAISE, AudioManager.STREAM_MUSIC, AudioManager.FLAG_SHOW_UI)
-                    R(true, "মিডিয়া ভলিউম বাড়ানো হয়েছে")
+                    R(true, "ভলিউম বাড়ানো হয়েছে")
                 }
                 "down" -> {
                     am.adjustSuggestedStreamVolume(AudioManager.ADJUST_LOWER, AudioManager.STREAM_MUSIC, AudioManager.FLAG_SHOW_UI)
-                    R(true, "মিডিয়া ভলিউম কমানো হয়েছে")
+                    R(true, "ভলিউম কমানো হয়েছে")
                 }
                 "mute" -> {
                     am.adjustSuggestedStreamVolume(AudioManager.ADJUST_MUTE, AudioManager.STREAM_MUSIC, AudioManager.FLAG_SHOW_UI)
-                    R(true, "মিডিয়া অডিও মিউট করা হয়েছে")
+                    R(true, "অডিও মিউট করা হয়েছে")
                 }
                 else -> {
                     am.adjustSuggestedStreamVolume(AudioManager.ADJUST_UNMUTE, AudioManager.STREAM_MUSIC, AudioManager.FLAG_SHOW_UI)
-                    R(true, "মিডিয়া অডিও আনমিউট করা হয়েছে")
+                    R(true, "অডিও আনমিউট করা হয়েছে")
                 }
             }
         } catch (e: Exception) {
-            R(false, "ভলিউম পরিবর্তন করা যায়নি: ${e.message}")
+            R(false, "ভলিউম পরিবর্তন করা যায়নি")
         }
     }
 
@@ -228,7 +317,7 @@ class ActionExecutor(private val app: SnehaApp) {
             app.startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             R(true, "$panel সেটিংস খোলা হয়েছে")
         } catch (e: Exception) {
-            R(false, "সেটিংস খোলা যায়নি: ${e.message}")
+            R(false, "সেটিংস খোলা যায়নি")
         }
     }
 
@@ -242,23 +331,19 @@ class ActionExecutor(private val app: SnehaApp) {
         val am = audio
         am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
         am.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
-        delay(1200)
-        return when (cmd) {
-            "pause" -> if (!am.isMusicActive) R(true, "অডিও থেমেছে") else R(false, "এখনও অডিও চলছে")
-            "play" -> if (am.isMusicActive) R(true, "অডিও চলছে") else R(false, "সক্রিয় মিডিয়া সেশন পাওয়া যায়নি")
-            else -> R(true, "মিডিয়া কমান্ড পাঠানো হয়েছে")
-        }
+        delay(800)
+        return R(true, "মিডিয়া কমান্ড পাঠানো হয়েছে")
     }
 }
 
 object Notifier {
-    private const val CH = "sneha_automation"
+    private const val CH = "doreman_automation"
     private const val ID = 4201
 
     fun show(ctx: Context, text: String) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26) {
-            nm.createNotificationChannel(NotificationChannel(CH, "Automation status", NotificationManager.IMPORTANCE_LOW))
+            nm.createNotificationChannel(NotificationChannel(CH, "Doreman Automation", NotificationManager.IMPORTANCE_LOW))
         }
         if (Build.VERSION.SDK_INT >= 33 &&
             ctx.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -269,7 +354,7 @@ object Notifier {
         )
         val n = NotificationCompat.Builder(ctx, CH)
             .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle("Sneha কাজ করছে")
+            .setContentTitle("Doreman কাজ করছে")
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)

@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
@@ -28,6 +29,10 @@
             <data android:scheme="https" />
         </intent>
         <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="market" />
+        </intent>
+        <intent>
             <action android:name="android.intent.action.DIAL" />
         </intent>
         <intent>
@@ -38,6 +43,7 @@
         <package android:name="com.google.android.youtube" />
         <package android:name="com.google.android.apps.youtube.music" />
         <package android:name="com.whatsapp" />
+        <package android:name="com.android.vending" />
     </queries>
 
     <application
@@ -61,7 +67,7 @@
         <service
             android:name=".automation.SnehaAccessibilityService"
             android:exported="true"
-            android:label="Sneha AI"
+            android:label="Doreman"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />

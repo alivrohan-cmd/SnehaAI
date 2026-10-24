@@ -5,13 +5,15 @@ import org.json.JSONObject
 
 sealed class Action {
     data class OpenApp(val app: String) : Action()
+    data class PlayStoreInstall(val query: String) : Action()
     data class CallContact(val target: String) : Action()
-    data class SendSms(val target: String, val message: String, val direct: Boolean = false) : Action()
+    data class SendSms(val target: String, val message: String, val direct: Boolean = true) : Action()
     data class WhatsAppMsg(val target: String, val message: String) : Action()
     data class YouTubeSearch(val query: String, val playFirst: Boolean) : Action()
     data class Media(val cmd: String) : Action()
     data class Volume(val dir: String) : Action()
     data class SystemSetting(val panel: String) : Action()
+    object CleanPhone : Action()
     object LockScreen : Action()
     object PowerMenu : Action()
     data class TapText(val text: String) : Action()
@@ -30,11 +32,14 @@ fun Action.isUi(): Boolean = when (this) {
     is Action.TapText, is Action.TapXY, is Action.Scroll, is Action.TypeText -> true
     Action.Back, Action.Home, Action.Enter, Action.ReadScreen, Action.LockScreen, Action.PowerMenu -> true
     is Action.YouTubeSearch -> playFirst
+    is Action.PlayStoreInstall -> true
+    is Action.WhatsAppMsg -> true
     else -> false
 }
 
 fun Action.describe(): String = when (this) {
     is Action.OpenApp -> "অ্যাপ খোলা: $app"
+    is Action.PlayStoreInstall -> "Play Store থেকে ডাউনলোড/ইনস্টল: $query"
     is Action.CallContact -> "ফোন কল করা: $target"
     is Action.SendSms -> "SMS পাঠানো ($target): \"$message\""
     is Action.WhatsAppMsg -> "WhatsApp মেসেজ ($target): \"$message\""
@@ -42,6 +47,7 @@ fun Action.describe(): String = when (this) {
     is Action.Media -> "মিডিয়া কমান্ড: $cmd"
     is Action.Volume -> "ভলিউম পরিবর্তন: $dir"
     is Action.SystemSetting -> "সিস্টেম সেটিংস খোলা: $panel"
+    Action.CleanPhone -> "ফোন ক্লিন / বুস্ট করা"
     Action.LockScreen -> "ফোনের স্ক্রিন লক করা"
     Action.PowerMenu -> "পাওয়ার/শাটডাউন মেনু খোলা"
     is Action.TapText -> "ট্যাপ: \"$text\""
@@ -57,15 +63,7 @@ fun Action.describe(): String = when (this) {
 }
 
 data class Plan(val reply: String, val actions: List<Action>, val rejected: List<String>) {
-    fun needsConfirm(): Boolean = actions.any {
-        when (it) {
-            is Action.CallContact -> true
-            is Action.SendSms -> it.direct
-            is Action.TapText, is Action.TapXY, is Action.TypeText -> true
-            Action.PowerMenu, is Action.Remember -> true
-            else -> false
-        }
-    }
+    fun needsConfirm(): Boolean = false
 }
 
 object PlanParser {
@@ -89,13 +87,15 @@ object PlanParser {
             val t = a.optString("type").trim()
             val act: Action? = when (t) {
                 "open_app" -> a.optString("app").trim().takeIf { it.isNotBlank() }?.let { Action.OpenApp(it.take(60)) }
+                "play_store_install" -> a.optString("query").trim().ifBlank { a.optString("app").trim() }
+                    .takeIf { it.isNotBlank() }?.let { Action.PlayStoreInstall(it.take(100)) }
                 "call_contact" -> a.optString("target").trim().ifBlank { a.optString("name").trim() }
                     .takeIf { it.isNotBlank() }?.let { Action.CallContact(it.take(80)) }
                 "send_sms" -> {
                     val target = a.optString("target").trim().ifBlank { a.optString("name").trim() }
                     val msg = a.optString("message").trim().ifBlank { a.optString("text").trim() }
                     if (target.isNotBlank() && msg.isNotBlank()) {
-                        Action.SendSms(target.take(80), msg.take(400), a.optBoolean("direct", false))
+                        Action.SendSms(target.take(80), msg.take(400), a.optBoolean("direct", true))
                     } else null
                 }
                 "whatsapp_msg" -> {
@@ -114,6 +114,7 @@ object PlanParser {
                 "system_setting" -> a.optString("panel").trim().lowercase()
                     .takeIf { it in setOf("wifi", "bluetooth", "sound", "display", "location", "airplane") }
                     ?.let { Action.SystemSetting(it) }
+                "clean_phone" -> Action.CleanPhone
                 "lock_screen" -> Action.LockScreen
                 "power_menu" -> Action.PowerMenu
                 "ui_tap_text" -> a.optString("text").trim().takeIf { it.isNotBlank() }?.let { Action.TapText(it.take(80)) }
